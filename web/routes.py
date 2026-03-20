@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from db.database import get_session
 from db.models import Server, EstadoRifa, PlataformaOrigen, Ticket
-from core.rifa_service import get_rifa, crear_ticket, asignar_link_pago
+from core.rifa_service import get_rifa, crear_ticket, asignar_link_pago, confirmar_tickets_gratis
 from utils.crypto import decrypt_token
 from web.oauth import (
     google_auth_url, google_exchange_code,
@@ -75,21 +75,24 @@ async def participar(
         if not rifa or rifa.estado != EstadoRifa.abierta:
             return HTMLResponse("<h1>Rifa no disponible.</h1>", status_code=404)
 
-        result = await session.execute(
-            select(Server).where(Server.id == rifa.server_id)
-        )
-        server = result.scalar_one_or_none()
-        mp_token = None
-        if server and server.mp_access_token_encrypted:
-            mp_token = decrypt_token(server.mp_access_token_encrypted)
+        es_gratis = rifa.precio_ticket == 0
 
-        if not mp_token:
-            return templates.TemplateResponse(
-                request, "rifa.html",
-                {"rifa": rifa, "oauth_user": oauth_user,
-                 "error": "Esta rifa no tiene pagos configurados todavía."},
-                status_code=503,
+        mp_token = None
+        if not es_gratis:
+            result = await session.execute(
+                select(Server).where(Server.id == rifa.server_id)
             )
+            server = result.scalar_one_or_none()
+            if server and server.mp_access_token_encrypted:
+                mp_token = decrypt_token(server.mp_access_token_encrypted)
+
+            if not mp_token:
+                return templates.TemplateResponse(
+                    request, "rifa.html",
+                    {"rifa": rifa, "oauth_user": oauth_user,
+                     "error": "Esta rifa no tiene pagos configurados todavía."},
+                    status_code=503,
+                )
 
         try:
             tickets = await crear_ticket(
@@ -107,6 +110,14 @@ async def participar(
                 request, "rifa.html",
                 {"rifa": rifa, "oauth_user": oauth_user, "error": str(e)},
                 status_code=422,
+            )
+
+        if es_gratis:
+            await confirmar_tickets_gratis(session, tickets)
+            ids_tickets = ",".join(str(t.id) for t in tickets)
+            return RedirectResponse(
+                f"/pago/exito?external_reference={rifa.id}:{ids_tickets}",
+                status_code=303,
             )
 
         init_point = await asignar_link_pago(

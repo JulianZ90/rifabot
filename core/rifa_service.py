@@ -245,6 +245,13 @@ async def asignar_link_pago(
     return init_point
 
 
+async def confirmar_tickets_gratis(session: AsyncSession, tickets: list[Ticket]) -> list[Ticket]:
+    for ticket in tickets:
+        ticket.estado = EstadoTicket.confirmado
+        ticket.confirmado_at = datetime.now(timezone.utc)
+    return tickets
+
+
 async def confirmar_tickets_por_pago(
     session: AsyncSession,
     mp_payment_id: str,
