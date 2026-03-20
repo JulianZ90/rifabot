@@ -152,6 +152,7 @@ async def rifa_crear(
             max_tickets_por_persona=max_tickets,
             canal_id=str(interaction.channel_id),
         )
+        rifa = await get_rifa(session, rifa.id)  # reload con tickets cargados
 
         embed = crear_embed_rifa(rifa)
         mensaje = await interaction.followup.send(embed=embed)
