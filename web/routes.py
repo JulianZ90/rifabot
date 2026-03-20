@@ -30,8 +30,23 @@ async def pagina_rifa(request: Request, rifa_id: int):
     async with get_session() as session:
         rifa = await get_rifa(session, rifa_id)
 
-    if not rifa or rifa.estado != EstadoRifa.abierta:
-        return HTMLResponse("<h1>Rifa no encontrada o cerrada.</h1>", status_code=404)
+    if not rifa:
+        return templates.TemplateResponse(
+            request, "404.html",
+            {"titulo": "Esta rifa no existe", "mensaje": "El link puede estar mal o la rifa fue eliminada."},
+            status_code=404,
+        )
+    if rifa.estado != EstadoRifa.abierta:
+        estado_msg = {
+            "cerrada": "Esta rifa ya cerró y no acepta más participantes.",
+            "sorteada": "Esta rifa ya fue sorteada.",
+            "cancelada": "Esta rifa fue cancelada.",
+        }.get(rifa.estado.value, "Esta rifa no está disponible.")
+        return templates.TemplateResponse(
+            request, "404.html",
+            {"titulo": rifa.nombre, "mensaje": estado_msg},
+            status_code=404,
+        )
 
     oauth_user = request.session.get("oauth_user")
     return templates.TemplateResponse(
