@@ -55,8 +55,8 @@ class Rifa(Base):
     cerrada_at = Column(DateTime(timezone=True), nullable=True)
 
     server = relationship("Server", back_populates="rifas")
-    tickets = relationship("Ticket", back_populates="rifa")
-    sorteo = relationship("Sorteo", back_populates="rifa", uselist=False)
+    tickets = relationship("Ticket", back_populates="rifa", lazy="selectin")
+    sorteo = relationship("Sorteo", back_populates="rifa", uselist=False, lazy="selectin")
 
 
 class Ticket(Base):
