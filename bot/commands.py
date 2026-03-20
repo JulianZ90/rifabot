@@ -17,6 +17,7 @@ from core.rifa_service import (
     get_mp_token,
     realizar_sorteo,
     cerrar_rifa,
+    borrar_rifa,
 )
 from db.models import Ticket, Rifa, EstadoTicket
 
@@ -334,3 +335,34 @@ async def rifa_lista(interaction: discord.Interaction):
         for r in rifas
     ])
     await interaction.followup.send(f"**Rifas abiertas:**\n{texto}", ephemeral=True)
+
+
+@bot.tree.command(name="rifa_borrar", description="Borra una rifa y todos sus tickets")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(rifa_id="ID de la rifa a borrar")
+async def rifa_borrar(interaction: discord.Interaction, rifa_id: int):
+    await interaction.response.defer(ephemeral=True)
+
+    async with get_session() as session:
+        rifa = await get_rifa(session, rifa_id)
+        if not rifa:
+            await interaction.followup.send("❌ Rifa no encontrada.", ephemeral=True)
+            return
+
+        nombre = rifa.nombre
+        tickets_confirmados = len([t for t in rifa.tickets if t.estado == EstadoTicket.confirmado])
+
+        if tickets_confirmados > 0:
+            await interaction.followup.send(
+                f"❌ La rifa **{nombre}** tiene {tickets_confirmados} ticket(s) confirmado(s). "
+                f"No se puede borrar una rifa con pagos confirmados.",
+                ephemeral=True,
+            )
+            return
+
+        ok = await borrar_rifa(session, rifa_id, str(interaction.guild_id))
+
+    if ok:
+        await interaction.followup.send(f"🗑️ Rifa **{nombre}** borrada.", ephemeral=True)
+    else:
+        await interaction.followup.send("❌ No se pudo borrar la rifa.", ephemeral=True)

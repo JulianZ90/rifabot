@@ -137,6 +137,26 @@ async def cerrar_rifa(session: AsyncSession, rifa_id: int) -> Rifa | None:
     return rifa
 
 
+async def borrar_rifa(session: AsyncSession, rifa_id: int, discord_server_id: str) -> bool:
+    """Borra una rifa y todos sus tickets. Solo si pertenece al servidor."""
+    from sqlalchemy import delete
+    from db.models import Ticket, Sorteo
+    rifa = await get_rifa(session, rifa_id)
+    if not rifa:
+        return False
+    # Verificar que la rifa pertenece al servidor
+    result = await session.execute(
+        select(Server).where(Server.id == rifa.server_id)
+    )
+    server = result.scalar_one_or_none()
+    if not server or server.discord_server_id != discord_server_id:
+        return False
+    await session.execute(delete(Sorteo).where(Sorteo.rifa_id == rifa_id))
+    await session.execute(delete(Ticket).where(Ticket.rifa_id == rifa_id))
+    await session.delete(rifa)
+    return True
+
+
 # ─────────────────────────────────────────────
 # TICKETS
 # ─────────────────────────────────────────────
