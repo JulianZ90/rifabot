@@ -30,10 +30,12 @@
       <span class="text-white font-semibold">${{ "%.0f"|format(rifa.precio_ticket) }} ARS</span>
       {% endif %}
     </div>
+    {% if rifa.precio_ticket > 0 %}
     <div class="flex items-center justify-between text-sm">
       <span class="text-gray-400">Máximo por persona</span>
       <span class="text-white">{{ rifa.max_tickets_por_persona }} tickets</span>
     </div>
+    {% endif %}
     {% if rifa.fecha_cierre %}
     <div class="flex items-center justify-between text-sm">
       <span class="text-gray-400">Cierre</span>
@@ -68,18 +70,21 @@
   </div>
 
   <form method="POST" action="/rifa/{{ rifa.id }}/participar" class="space-y-4">
+    {% if rifa.precio_ticket == 0 %}
+    <input type="hidden" name="cantidad" value="1" />
+    {% else %}
     <div>
       <label for="cantidad" class="block text-xs uppercase tracking-widest text-gray-500 mb-2">Cantidad de tickets</label>
       <select id="cantidad" name="cantidad"
               class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-gray-500 transition">
         {% for n in range(1, rifa.max_tickets_por_persona + 1) %}
         <option value="{{ n }}">
-          {{ n }} ticket{{ 's' if n > 1 else '' }}
-          {% if rifa.precio_ticket > 0 %} — ${{ "%.0f"|format(rifa.precio_ticket * n) }} ARS{% endif %}
+          {{ n }} ticket{{ 's' if n > 1 else '' }} — ${{ "%.0f"|format(rifa.precio_ticket * n) }} ARS
         </option>
         {% endfor %}
       </select>
     </div>
+    {% endif %}
     <button type="submit"
             class="w-full bg-white text-gray-950 font-semibold rounded-xl py-3 text-sm hover:bg-gray-200 active:scale-95 transition">
       {% if rifa.precio_ticket == 0 %}Participar →{% else %}Ir al pago →{% endif %}
@@ -126,15 +131,18 @@
     <form method="POST" action="/rifa/{{ rifa.id }}/participar" class="space-y-3">
       <input type="email" name="email" required placeholder="tu@email.com"
              class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 outline-none focus:border-gray-500 transition" />
+      {% if rifa.precio_ticket == 0 %}
+      <input type="hidden" name="cantidad" value="1" />
+      {% else %}
       <select name="cantidad"
               class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-gray-500 transition">
         {% for n in range(1, rifa.max_tickets_por_persona + 1) %}
         <option value="{{ n }}">
-          {{ n }} ticket{{ 's' if n > 1 else '' }}
-          {% if rifa.precio_ticket > 0 %} — ${{ "%.0f"|format(rifa.precio_ticket * n) }} ARS{% endif %}
+          {{ n }} ticket{{ 's' if n > 1 else '' }} — ${{ "%.0f"|format(rifa.precio_ticket * n) }} ARS
         </option>
         {% endfor %}
       </select>
+      {% endif %}
       <button type="submit"
               class="w-full bg-white text-gray-950 font-semibold rounded-xl py-3 text-sm hover:bg-gray-200 active:scale-95 transition">
         {% if rifa.precio_ticket == 0 %}Participar →{% else %}Ir al pago →{% endif %}

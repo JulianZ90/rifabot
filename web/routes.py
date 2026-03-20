@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from db.database import get_session
 from db.models import Server, EstadoRifa, PlataformaOrigen, Ticket
-from core.rifa_service import get_rifa, crear_ticket, asignar_link_pago, confirmar_tickets_gratis
+from core.rifa_service import get_rifa, crear_ticket, asignar_link_pago, confirmar_tickets_gratis, contar_tickets_usuario
 from utils.crypto import decrypt_token
 from web.oauth import (
     google_auth_url, google_exchange_code,
@@ -76,6 +76,17 @@ async def participar(
             return HTMLResponse("<h1>Rifa no disponible.</h1>", status_code=404)
 
         es_gratis = rifa.precio_ticket == 0
+
+        if es_gratis:
+            cantidad = 1
+            ya_participa = await contar_tickets_usuario(session, rifa_id, plataforma_uid)
+            if ya_participa > 0:
+                return templates.TemplateResponse(
+                    request, "rifa.html",
+                    {"rifa": rifa, "oauth_user": oauth_user,
+                     "error": "Ya estás participando en esta rifa."},
+                    status_code=422,
+                )
 
         mp_token = None
         if not es_gratis:
