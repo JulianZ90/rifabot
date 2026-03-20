@@ -59,6 +59,22 @@ class RifaBot(commands.Bot):
 bot = RifaBot()
 
 
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    msg = "❌ Ocurrió un error inesperado."
+    if isinstance(error, app_commands.MissingPermissions):
+        msg = "❌ No tenés permisos para usar este comando."
+    else:
+        logger.error(f"Error en comando {interaction.command}: {error}", exc_info=error)
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
+    except Exception:
+        pass
+
+
 # ─────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────
