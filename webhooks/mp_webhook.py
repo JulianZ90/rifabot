@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Request, HTTPException
 from db.database import get_session
 from core.rifa_service import confirmar_tickets_por_pago, get_rifa
@@ -7,11 +8,20 @@ from db.models import Server
 from utils.crypto import decrypt_token
 import logging
 
+from starlette.middleware.sessions import SessionMiddleware
 from web.routes import router as web_router
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SESSION_SECRET_KEY", ""),
+    session_cookie="rifabot_session",
+    max_age=3600,
+    same_site="lax",
+    https_only=False,
+)
 app.include_router(web_router)
 
 # Referencia al bot de Discord (se inyecta desde main.py)

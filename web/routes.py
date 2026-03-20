@@ -1,21 +1,29 @@
+import os
+import secrets
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from sqlalchemy import select
-from utils.crypto import decrypt_token
-from db.models import Server, EstadoRifa, PlataformaOrigen
-import os
 
 from db.database import get_session
+from db.models import Server, EstadoRifa, PlataformaOrigen, Ticket
 from core.rifa_service import get_rifa, crear_ticket, asignar_link_pago
+from utils.crypto import decrypt_token
+from web.oauth import (
+    google_auth_url, google_exchange_code,
+    ms_auth_url, ms_exchange_code,
+)
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-
 router = APIRouter()
 
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "")
 
+
+# ─────────────────────────────────────────────
+# RIFA
+# ─────────────────────────────────────────────
 
 @router.get("/rifa/{rifa_id}", response_class=HTMLResponse)
 async def pagina_rifa(request: Request, rifa_id: int):
@@ -25,8 +33,9 @@ async def pagina_rifa(request: Request, rifa_id: int):
     if not rifa or rifa.estado != EstadoRifa.abierta:
         return HTMLResponse("<h1>Rifa no encontrada o cerrada.</h1>", status_code=404)
 
+    oauth_user = request.session.get("oauth_user")
     return templates.TemplateResponse(
-        request, "rifa.html", {"rifa": rifa}
+        request, "rifa.html", {"rifa": rifa, "oauth_user": oauth_user}
     )
 
 
@@ -34,32 +43,38 @@ async def pagina_rifa(request: Request, rifa_id: int):
 async def participar(
     request: Request,
     rifa_id: int,
-    plataforma: str = Form(...),
-    handle: str = Form(...),
     cantidad: int = Form(...),
+    email: str = Form(None),
 ):
-    handle = handle.strip().lstrip("@")
+    oauth_user = request.session.get("oauth_user")
 
-    if not handle:
-        async with get_session() as session:
-            rifa = await get_rifa(session, rifa_id)
-        return templates.TemplateResponse(
-            request, "rifa.html",
-            {"rifa": rifa, "error": "Ingresá tu usuario.", "form_handle": handle},
-            status_code=422,
-        )
-
-    try:
-        plataforma_enum = PlataformaOrigen(plataforma)
-    except ValueError:
-        plataforma_enum = PlataformaOrigen.web
+    if oauth_user:
+        plataforma = PlataformaOrigen(oauth_user["provider"])
+        plataforma_uid = oauth_user["email"]
+        plataforma_handle = oauth_user["name"]
+        email_participante = oauth_user["email"]
+        nombre_participante = oauth_user["name"]
+    else:
+        email = (email or "").strip()
+        if not email or "@" not in email:
+            async with get_session() as session:
+                rifa = await get_rifa(session, rifa_id)
+            return templates.TemplateResponse(
+                request, "rifa.html",
+                {"rifa": rifa, "oauth_user": None, "error": "Ingresá un email válido."},
+                status_code=422,
+            )
+        plataforma = PlataformaOrigen.web
+        plataforma_uid = email
+        plataforma_handle = email
+        email_participante = email
+        nombre_participante = None
 
     async with get_session() as session:
         rifa = await get_rifa(session, rifa_id)
         if not rifa or rifa.estado != EstadoRifa.abierta:
             return HTMLResponse("<h1>Rifa no disponible.</h1>", status_code=404)
 
-        # Obtener token MP del servidor de la rifa
         result = await session.execute(
             select(Server).where(Server.id == rifa.server_id)
         )
@@ -71,7 +86,8 @@ async def participar(
         if not mp_token:
             return templates.TemplateResponse(
                 request, "rifa.html",
-                {"rifa": rifa, "error": "Esta rifa no tiene pagos configurados todavía."},
+                {"rifa": rifa, "oauth_user": oauth_user,
+                 "error": "Esta rifa no tiene pagos configurados todavía."},
                 status_code=503,
             )
 
@@ -80,14 +96,16 @@ async def participar(
                 session=session,
                 rifa_id=rifa_id,
                 cantidad=cantidad,
-                plataforma=plataforma_enum,
-                plataforma_uid=handle,
-                plataforma_handle=handle,
+                plataforma=plataforma,
+                plataforma_uid=plataforma_uid,
+                plataforma_handle=plataforma_handle,
+                nombre_participante=nombre_participante,
+                email_participante=email_participante,
             )
         except ValueError as e:
             return templates.TemplateResponse(
                 request, "rifa.html",
-                {"rifa": rifa, "error": str(e), "form_handle": handle},
+                {"rifa": rifa, "oauth_user": oauth_user, "error": str(e)},
                 status_code=422,
             )
 
@@ -102,11 +120,94 @@ async def participar(
     return RedirectResponse(init_point, status_code=303)
 
 
+# ─────────────────────────────────────────────
+# OAUTH — GOOGLE
+# ─────────────────────────────────────────────
+
+@router.get("/auth/google")
+async def auth_google(request: Request, rifa_id: int):
+    nonce = secrets.token_urlsafe(16)
+    request.session["oauth_nonce"] = nonce
+    request.session["oauth_rifa_id"] = rifa_id
+    return RedirectResponse(google_auth_url(rifa_id, nonce))
+
+
+@router.get("/auth/google/callback")
+async def auth_google_callback(request: Request, code: str = None, state: str = "", error: str = None):
+    if error or not code:
+        return RedirectResponse("/")
+
+    parts = state.split(":", 1)
+    if len(parts) != 2 or parts[1] != request.session.get("oauth_nonce"):
+        return HTMLResponse("Estado inválido.", status_code=400)
+
+    rifa_id = request.session.get("oauth_rifa_id")
+
+    try:
+        user = await google_exchange_code(code)
+    except Exception:
+        rifa_id = rifa_id or 1
+        return RedirectResponse(f"/rifa/{rifa_id}?error=google")
+
+    request.session["oauth_user"] = user
+    request.session.pop("oauth_nonce", None)
+    return RedirectResponse(f"/rifa/{rifa_id}")
+
+
+# ─────────────────────────────────────────────
+# OAUTH — MICROSOFT
+# ─────────────────────────────────────────────
+
+@router.get("/auth/microsoft")
+async def auth_microsoft(request: Request, rifa_id: int):
+    nonce = secrets.token_urlsafe(16)
+    request.session["oauth_nonce"] = nonce
+    request.session["oauth_rifa_id"] = rifa_id
+    return RedirectResponse(ms_auth_url(rifa_id, nonce))
+
+
+@router.get("/auth/microsoft/callback")
+async def auth_microsoft_callback(request: Request, code: str = None, state: str = "", error: str = None):
+    if error or not code:
+        return RedirectResponse("/")
+
+    parts = state.split(":", 1)
+    if len(parts) != 2 or parts[1] != request.session.get("oauth_nonce"):
+        return HTMLResponse("Estado inválido.", status_code=400)
+
+    rifa_id = request.session.get("oauth_rifa_id")
+
+    try:
+        user = await ms_exchange_code(code)
+    except Exception:
+        rifa_id = rifa_id or 1
+        return RedirectResponse(f"/rifa/{rifa_id}?error=microsoft")
+
+    request.session["oauth_user"] = user
+    request.session.pop("oauth_nonce", None)
+    return RedirectResponse(f"/rifa/{rifa_id}")
+
+
+# ─────────────────────────────────────────────
+# LOGOUT
+# ─────────────────────────────────────────────
+
+@router.get("/auth/logout")
+async def logout(request: Request, rifa_id: int = None):
+    request.session.clear()
+    dest = f"/rifa/{rifa_id}" if rifa_id else "/"
+    return RedirectResponse(dest)
+
+
+# ─────────────────────────────────────────────
+# RETORNO DE PAGO
+# ─────────────────────────────────────────────
+
 @router.get("/pago/exito", response_class=HTMLResponse)
 async def pago_exito(request: Request, external_reference: str = ""):
-    """MP redirige aquí cuando el pago fue aprobado."""
     rifa_id = None
     codigos = []
+    rifa_nombre = ""
 
     if external_reference:
         parts = external_reference.split(":")
@@ -118,8 +219,6 @@ async def pago_exito(request: Request, external_reference: str = ""):
                 ticket_ids = []
 
             if rifa_id and ticket_ids:
-                from sqlalchemy import select
-                from db.models import Ticket
                 async with get_session() as session:
                     result = await session.execute(
                         select(Ticket).where(Ticket.id.in_(ticket_ids))
@@ -137,7 +236,6 @@ async def pago_exito(request: Request, external_reference: str = ""):
 
 @router.get("/pago/pendiente", response_class=HTMLResponse)
 async def pago_pendiente(request: Request):
-    """MP redirige aquí cuando el pago está pendiente o fue rechazado."""
     return HTMLResponse("""
     <html><body style="font-family:sans-serif;text-align:center;padding:80px;background:#030712;color:#9ca3af">
     <div style="font-size:3rem;margin-bottom:1rem">⏳</div>
@@ -146,6 +244,10 @@ async def pago_pendiente(request: Request):
     </body></html>
     """)
 
+
+# ─────────────────────────────────────────────
+# PÁGINAS LEGALES
+# ─────────────────────────────────────────────
 
 @router.get("/privacidad", response_class=HTMLResponse)
 async def privacidad(request: Request):

@@ -24,6 +24,8 @@ class PlataformaOrigen(str, enum.Enum):
     instagram = "instagram"
     tiktok = "tiktok"
     web = "web"
+    google = "google"
+    microsoft = "microsoft"
 
 
 class Server(Base):
