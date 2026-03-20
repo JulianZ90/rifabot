@@ -312,7 +312,11 @@ async def rifa_sortear(interaction: discord.Interaction, rifa_id: int):
         embed.add_field(name="👤 Ganador", value=f"{ganador.plataforma_handle} ({ganador.plataforma})", inline=True)
     else:
         embed.add_field(name="👤 Ganador", value=ganador.nombre_participante or "Anónimo", inline=True)
-    embed.set_footer(text=f"Hash de verificación: {sorteo.hash_resultado[:16]}...")
+    if sorteo.seed and sorteo.seed.startswith("randomorg:"):
+        serial = sorteo.seed.split("serial=")[1].split(":")[0]
+        embed.set_footer(text=f"Verificable en random.org · Serial #{serial}")
+    else:
+        embed.set_footer(text=f"Hash: {sorteo.hash_resultado[:20]}...")
 
     if ganador.plataforma == PlataformaOrigen.discord:
         mencionar = f"<@{ganador.plataforma_uid}>"

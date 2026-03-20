@@ -11,6 +11,7 @@ import os
 from db.models import Server, Rifa, Ticket, Sorteo, EstadoRifa, EstadoTicket, PlataformaOrigen
 from utils.crypto import encrypt_token, decrypt_token
 from utils.mp import crear_preferencia_pago
+from utils.randomorg import sortear_indice
 
 
 # ─────────────────────────────────────────────
@@ -302,12 +303,19 @@ async def realizar_sorteo(session: AsyncSession, rifa_id: int) -> Sorteo | None:
     if not tickets_confirmados:
         return None
 
-    seed = f"{datetime.now(timezone.utc).isoformat()}:{len(tickets_confirmados)}"
-    random.seed(seed)
-    ganador = random.choice(tickets_confirmados)
+    tickets_ordenados = sorted(tickets_confirmados, key=lambda t: t.id)
+    total = len(tickets_ordenados)
 
-    hash_data = f"{seed}:{ganador.codigo}:{ganador.plataforma_uid or ganador.nombre_participante}"
-    hash_resultado = hashlib.sha256(hash_data.encode()).hexdigest()
+    indice, serial, signature = await sortear_indice(total)
+    ganador = tickets_ordenados[indice]
+
+    if serial:
+        seed = f"randomorg:serial={serial}:indice={indice}:total={total}"
+        hash_resultado = signature
+    else:
+        seed = f"local:{datetime.now(timezone.utc).isoformat()}:indice={indice}:total={total}"
+        hash_data = f"{seed}:{ganador.codigo}"
+        hash_resultado = hashlib.sha256(hash_data.encode()).hexdigest()
 
     rifa = await get_rifa(session, rifa_id)
     rifa.estado = EstadoRifa.sorteada
