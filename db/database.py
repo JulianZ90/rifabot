@@ -2,7 +2,9 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from contextlib import asynccontextmanager
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+_raw_url = os.getenv("DATABASE_URL", "")
+# Railway provee postgresql:// pero asyncpg necesita postgresql+asyncpg://
+DATABASE_URL = _raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
