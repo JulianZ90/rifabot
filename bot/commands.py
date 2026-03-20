@@ -155,13 +155,9 @@ async def rifa_crear(
         rifa = await get_rifa(session, rifa.id)  # reload con tickets cargados
 
         embed = crear_embed_rifa(rifa)
+        embed.description = (embed.description or "") + f"\n\n🎉 ¡Nueva rifa abierta! Usá `/participar rifa_id:{rifa.id}` para comprar tickets."
         mensaje = await interaction.followup.send(embed=embed)
         rifa.mensaje_discord_id = str(mensaje.id)
-
-    await interaction.channel.send(
-        f"🎉 ¡Nueva rifa abierta! **{nombre}** — ${precio} por ticket.\n"
-        f"Usá `/participar rifa_id:{rifa.id}` para comprar tickets."
-    )
 
 
 @bot.tree.command(name="participar", description="Comprá tickets para una rifa")
