@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{{ rifa.nombre }} — RifaBot{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-12">
+
+  <!-- Header -->
+  <div class="text-center mb-8">
+    <p class="text-xs uppercase tracking-widest text-gray-500 mb-2">Rifa</p>
+    <h1 class="text-3xl font-bold text-white">{{ rifa.nombre }}</h1>
+  </div>
+
+  <!-- Imagen -->
+  {% if rifa.imagen_url %}
+  <img src="{{ rifa.imagen_url }}" alt="{{ rifa.nombre }}"
+       class="w-full rounded-2xl object-cover max-h-64 mb-6" />
+  {% endif %}
+
+  <!-- Info -->
+  <div class="bg-gray-900 rounded-2xl p-5 mb-6 space-y-2">
+    {% if rifa.descripcion %}
+    <p class="text-gray-300 text-sm leading-relaxed">{{ rifa.descripcion }}</p>
+    <hr class="border-gray-800" />
+    {% endif %}
+    <div class="flex items-center justify-between text-sm">
+      <span class="text-gray-400">Precio por ticket</span>
+      <span class="text-white font-semibold">${{ "%.0f"|format(rifa.precio_ticket) }} ARS</span>
+    </div>
+    <div class="flex items-center justify-between text-sm">
+      <span class="text-gray-400">Máximo por persona</span>
+      <span class="text-white">{{ rifa.max_tickets_por_persona }} tickets</span>
+    </div>
+    {% if rifa.fecha_cierre %}
+    <div class="flex items-center justify-between text-sm">
+      <span class="text-gray-400">Cierre</span>
+      <span class="text-white">{{ rifa.fecha_cierre.strftime("%d/%m/%Y %H:%M") }}</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Formulario -->
+  {% if error %}
+  <div class="bg-red-900/40 border border-red-700 text-red-300 rounded-xl px-4 py-3 text-sm mb-4">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <form method="POST" action="/rifa/{{ rifa.id }}/participar" class="space-y-5">
+
+    <!-- Plataforma -->
+    <div>
+      <label class="block text-xs uppercase tracking-widest text-gray-500 mb-2">Tu red social</label>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="cursor-pointer">
+          <input type="radio" name="plataforma" value="instagram" class="sr-only peer" required />
+          <div class="flex items-center justify-center gap-2 border border-gray-700 rounded-xl py-3 text-sm font-medium text-gray-400
+                      peer-checked:border-pink-500 peer-checked:text-pink-400 peer-checked:bg-pink-500/10 transition">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+            </svg>
+            Instagram
+          </div>
+        </label>
+        <label class="cursor-pointer">
+          <input type="radio" name="plataforma" value="tiktok" class="sr-only peer" />
+          <div class="flex items-center justify-center gap-2 border border-gray-700 rounded-xl py-3 text-sm font-medium text-gray-400
+                      peer-checked:border-cyan-400 peer-checked:text-cyan-300 peer-checked:bg-cyan-400/10 transition">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.75a4.85 4.85 0 01-1.01-.06z"/>
+            </svg>
+            TikTok
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Handle -->
+    <div>
+      <label for="handle" class="block text-xs uppercase tracking-widest text-gray-500 mb-2">Tu usuario</label>
+      <div class="flex items-center bg-gray-900 border border-gray-700 rounded-xl overflow-hidden focus-within:border-gray-500 transition">
+        <span class="px-3 text-gray-500 select-none">@</span>
+        <input id="handle" name="handle" type="text" required
+               placeholder="tunombre"
+               value="{{ form_handle or '' }}"
+               class="flex-1 bg-transparent py-3 pr-4 text-white placeholder-gray-600 outline-none text-sm" />
+      </div>
+    </div>
+
+    <!-- Cantidad -->
+    <div>
+      <label for="cantidad" class="block text-xs uppercase tracking-widest text-gray-500 mb-2">Cantidad de tickets</label>
+      <select id="cantidad" name="cantidad"
+              class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-gray-500 transition">
+        {% for n in range(1, rifa.max_tickets_por_persona + 1) %}
+        <option value="{{ n }}">{{ n }} ticket{{ 's' if n > 1 else '' }} — ${{ "%.0f"|format(rifa.precio_ticket * n) }} ARS</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Submit -->
+    <button type="submit"
+            class="w-full bg-white text-gray-950 font-semibold rounded-xl py-3 text-sm hover:bg-gray-200 active:scale-95 transition">
+      Ir al pago →
+    </button>
+
+  </form>
+
+  <p class="text-center text-xs text-gray-600 mt-6">
+    El pago se procesa de forma segura a través de MercadoPago
+  </p>
+
+</div>
+{% endblock %}
