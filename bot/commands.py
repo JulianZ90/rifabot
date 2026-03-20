@@ -35,9 +35,14 @@ def parsear_fecha_ar(fecha_str: str) -> datetime:
     try:
         dt = datetime.strptime(fecha_str.strip(), "%d/%m/%Y %H:%M")
         dt = dt.replace(tzinfo=AR_TZ)
-        return dt.astimezone(timezone.utc)
+        dt_utc = dt.astimezone(timezone.utc)
     except ValueError:
         raise ValueError("Formato de fecha inválido. Usá DD/MM/YYYY HH:MM — ej: 25/03/2024 20:00")
+
+    if dt_utc <= datetime.now(timezone.utc):
+        raise ValueError("La fecha de cierre debe ser en el futuro.")
+
+    return dt_utc
 
 
 class RifaBot(commands.Bot):
