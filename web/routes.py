@@ -145,3 +145,13 @@ async def pago_pendiente(request: Request):
     <p>Tu pago está siendo procesado. Cuando se acredite, tu ticket quedará confirmado.</p>
     </body></html>
     """)
+
+
+@router.get("/privacidad", response_class=HTMLResponse)
+async def privacidad(request: Request):
+    return templates.TemplateResponse(request, "privacidad.html", {})
+
+
+@router.get("/terminos", response_class=HTMLResponse)
+async def terminos(request: Request):
+    return templates.TemplateResponse(request, "terminos.html", {})
