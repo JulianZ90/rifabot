@@ -120,4 +120,4 @@ class Sorteo(Base):
     realizado_at = Column(DateTime(timezone=True), server_default=func.now())
 
     rifa = relationship("Rifa", back_populates="sorteo")
-    ticket_ganador = relationship("Ticket")
+    ticket_ganador = relationship("Ticket", lazy="selectin")
