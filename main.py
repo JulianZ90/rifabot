@@ -6,6 +6,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 from bot.commands import bot
+from bot.scheduler import scheduler_loop
 from webhooks.mp_webhook import app as webhook_app, set_bot
 from db.database import init_db
 
@@ -35,10 +36,11 @@ async def main():
     config = uvicorn.Config(webhook_app, host="0.0.0.0", port=WEBHOOK_PORT, log_level="info")
     server = uvicorn.Server(config)
 
-    # Correr bot y webhook server de forma concurrente
+    # Correr bot, webhook server y scheduler de forma concurrente
     await asyncio.gather(
         bot.start(DISCORD_TOKEN),
         server.serve(),
+        scheduler_loop(bot),
     )
 
 

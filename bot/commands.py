@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from decimal import Decimal
+from datetime import datetime, timezone, timedelta
 import os
 import logging
 from dotenv import load_dotenv
@@ -25,6 +26,18 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "")
+
+AR_TZ = timezone(timedelta(hours=-3))
+
+
+def parsear_fecha_ar(fecha_str: str) -> datetime:
+    """Parsea 'DD/MM/YYYY HH:MM' como hora Argentina (UTC-3) y retorna datetime UTC."""
+    try:
+        dt = datetime.strptime(fecha_str.strip(), "%d/%m/%Y %H:%M")
+        dt = dt.replace(tzinfo=AR_TZ)
+        return dt.astimezone(timezone.utc)
+    except ValueError:
+        raise ValueError("Formato de fecha inválido. Usá DD/MM/YYYY HH:MM — ej: 25/03/2024 20:00")
 
 
 class RifaBot(commands.Bot):
@@ -125,6 +138,7 @@ async def rifa_setup(interaction: discord.Interaction, access_token: str):
     precio="Precio por ticket en ARS",
     descripcion="Descripción del premio (opcional)",
     max_tickets="Máximo de tickets por persona (default: 10)",
+    fecha_cierre="Sorteo automático: DD/MM/YYYY HH:MM hora Argentina (ej: 25/03/2024 20:00)",
 )
 async def rifa_crear(
     interaction: discord.Interaction,
@@ -132,8 +146,17 @@ async def rifa_crear(
     precio: float,
     descripcion: str = "",
     max_tickets: int = 10,
+    fecha_cierre: str = None,
 ):
     await interaction.response.defer()
+
+    cierre_dt = None
+    if fecha_cierre:
+        try:
+            cierre_dt = parsear_fecha_ar(fecha_cierre)
+        except ValueError as e:
+            await interaction.followup.send(f"❌ {e}", ephemeral=True)
+            return
 
     async with get_session() as session:
         mp_token = await get_mp_token(session, str(interaction.guild_id))
@@ -152,6 +175,7 @@ async def rifa_crear(
             precio=Decimal(str(precio)),
             max_tickets_por_persona=max_tickets,
             canal_id=str(interaction.channel_id),
+            fecha_cierre=cierre_dt,
         )
         rifa = await get_rifa(session, rifa.id)  # reload con tickets cargados
 

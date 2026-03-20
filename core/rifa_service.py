@@ -114,6 +114,23 @@ async def get_rifa(session: AsyncSession, rifa_id: int) -> Rifa | None:
     return result.scalar_one_or_none()
 
 
+async def get_rifas_para_sortear(session: AsyncSession) -> list[Rifa]:
+    """Rifas abiertas cuya fecha_cierre ya pasó — listas para sorteo automático."""
+    now = datetime.now(timezone.utc)
+    result = await session.execute(
+        select(Rifa)
+        .options(selectinload(Rifa.tickets))
+        .where(
+            and_(
+                Rifa.estado == EstadoRifa.abierta,
+                Rifa.fecha_cierre.isnot(None),
+                Rifa.fecha_cierre <= now,
+            )
+        )
+    )
+    return result.scalars().all()
+
+
 async def get_rifas_abiertas(session: AsyncSession, discord_server_id: str) -> list[Rifa]:
     result = await session.execute(
         select(Rifa)
