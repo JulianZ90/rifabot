@@ -7,9 +7,12 @@ from db.models import Server
 from utils.crypto import decrypt_token
 import logging
 
+from web.routes import router as web_router
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+app.include_router(web_router)
 
 # Referencia al bot de Discord (se inyecta desde main.py)
 _discord_bot = None
@@ -61,7 +64,8 @@ async def mercadopago_webhook(request: Request):
             return {"status": "not_approved"}
 
         external_reference = pago.get("external_reference", "")
-        tickets = await confirmar_tickets_por_pago(session, payment_id, external_reference)
+        payer_email = pago.get("payer", {}).get("email")
+        tickets = await confirmar_tickets_por_pago(session, payment_id, external_reference, payer_email)
 
         if not tickets:
             logger.warning(f"No se encontraron tickets para external_reference: {external_reference}")

@@ -8,7 +8,7 @@ import random
 import string
 import os
 
-from db.models import Server, Rifa, Ticket, Sorteo, EstadoRifa, EstadoTicket
+from db.models import Server, Rifa, Ticket, Sorteo, EstadoRifa, EstadoTicket, PlataformaOrigen
 from utils.crypto import encrypt_token, decrypt_token
 from utils.mp import crear_preferencia_pago
 
@@ -137,23 +137,25 @@ async def cerrar_rifa(session: AsyncSession, rifa_id: int) -> Rifa | None:
     return rifa
 
 
-async def borrar_rifa(session: AsyncSession, rifa_id: int, discord_server_id: str) -> bool:
-    """Borra una rifa y todos sus tickets. Solo si pertenece al servidor."""
-    from sqlalchemy import delete
-    from db.models import Ticket, Sorteo
+async def cancelar_rifa(session: AsyncSession, rifa_id: int, discord_server_id: str) -> bool:
+    """Cancela una rifa lógicamente. Solo si pertenece al servidor y no fue sorteada."""
     rifa = await get_rifa(session, rifa_id)
     if not rifa:
         return False
-    # Verificar que la rifa pertenece al servidor
     result = await session.execute(
         select(Server).where(Server.id == rifa.server_id)
     )
     server = result.scalar_one_or_none()
     if not server or server.discord_server_id != discord_server_id:
         return False
-    await session.execute(delete(Sorteo).where(Sorteo.rifa_id == rifa_id))
-    await session.execute(delete(Ticket).where(Ticket.rifa_id == rifa_id))
-    await session.delete(rifa)
+    if rifa.estado == EstadoRifa.sorteada:
+        raise ValueError("No se puede cancelar una rifa que ya fue sorteada.")
+    rifa.estado = EstadoRifa.cancelada
+    rifa.cerrada_at = datetime.now(timezone.utc)
+    # Marcar tickets pendientes como rechazados
+    for ticket in rifa.tickets:
+        if ticket.estado == EstadoTicket.pendiente:
+            ticket.estado = EstadoTicket.rechazado
     return True
 
 
@@ -161,12 +163,12 @@ async def borrar_rifa(session: AsyncSession, rifa_id: int, discord_server_id: st
 # TICKETS
 # ─────────────────────────────────────────────
 
-async def contar_tickets_usuario(session: AsyncSession, rifa_id: int, discord_user_id: str) -> int:
+async def contar_tickets_usuario(session: AsyncSession, rifa_id: int, plataforma_uid: str) -> int:
     result = await session.execute(
         select(func.count(Ticket.id)).where(
             and_(
                 Ticket.rifa_id == rifa_id,
-                Ticket.discord_user_id == discord_user_id,
+                Ticket.plataforma_uid == plataforma_uid,
                 Ticket.estado.in_([EstadoTicket.pendiente, EstadoTicket.confirmado]),
             )
         )
@@ -178,8 +180,9 @@ async def crear_ticket(
     session: AsyncSession,
     rifa_id: int,
     cantidad: int,
-    discord_user_id: str = None,
-    discord_user_name: str = None,
+    plataforma: PlataformaOrigen = None,
+    plataforma_uid: str = None,
+    plataforma_handle: str = None,
     nombre_participante: str = None,
     email_participante: str = None,
     telefono_participante: str = None,
@@ -188,8 +191,8 @@ async def crear_ticket(
     if not rifa or rifa.estado != EstadoRifa.abierta:
         raise ValueError("La rifa no existe o no está abierta.")
 
-    if discord_user_id:
-        tickets_actuales = await contar_tickets_usuario(session, rifa_id, discord_user_id)
+    if plataforma_uid:
+        tickets_actuales = await contar_tickets_usuario(session, rifa_id, plataforma_uid)
         if tickets_actuales + cantidad > rifa.max_tickets_por_persona:
             disponibles = rifa.max_tickets_por_persona - tickets_actuales
             raise ValueError(
@@ -203,8 +206,9 @@ async def crear_ticket(
         ticket = Ticket(
             rifa_id=rifa_id,
             codigo=codigo,
-            discord_user_id=discord_user_id,
-            discord_user_name=discord_user_name,
+            plataforma=plataforma,
+            plataforma_uid=plataforma_uid,
+            plataforma_handle=plataforma_handle,
             nombre_participante=nombre_participante,
             email_participante=email_participante,
             telefono_participante=telefono_participante,
@@ -245,6 +249,7 @@ async def confirmar_tickets_por_pago(
     session: AsyncSession,
     mp_payment_id: str,
     external_reference: str,
+    payer_email: str | None = None,
 ) -> list[Ticket] | None:
     parts = external_reference.split(":")
     if len(parts) != 2:
@@ -265,6 +270,7 @@ async def confirmar_tickets_por_pago(
 
     for ticket in tickets:
         ticket.mp_payment_id = mp_payment_id
+        ticket.mp_payer_email = payer_email
         ticket.estado = EstadoTicket.confirmado
         ticket.confirmado_at = datetime.now(timezone.utc)
 
@@ -293,7 +299,7 @@ async def realizar_sorteo(session: AsyncSession, rifa_id: int) -> Sorteo | None:
     random.seed(seed)
     ganador = random.choice(tickets_confirmados)
 
-    hash_data = f"{seed}:{ganador.codigo}:{ganador.discord_user_id or ganador.nombre_participante}"
+    hash_data = f"{seed}:{ganador.codigo}:{ganador.plataforma_uid or ganador.nombre_participante}"
     hash_resultado = hashlib.sha256(hash_data.encode()).hexdigest()
 
     rifa = await get_rifa(session, rifa_id)

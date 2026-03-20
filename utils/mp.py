@@ -15,9 +15,9 @@ async def crear_preferencia_pago(
         "external_reference": external_reference,
         "notification_url": notification_url,
         "back_urls": {
-            "success": notification_url,
-            "failure": notification_url,
-            "pending": notification_url,
+            "success": f"{notification_url.rsplit('/webhook', 1)[0]}/pago/exito",
+            "failure": f"{notification_url.rsplit('/webhook', 1)[0]}/pago/pendiente",
+            "pending": f"{notification_url.rsplit('/webhook', 1)[0]}/pago/pendiente",
         },
         "auto_return": "approved",
     }

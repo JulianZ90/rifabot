@@ -10,12 +10,20 @@ class EstadoRifa(str, enum.Enum):
     abierta = "abierta"
     cerrada = "cerrada"
     sorteada = "sorteada"
+    cancelada = "cancelada"
 
 
 class EstadoTicket(str, enum.Enum):
     pendiente = "pendiente"      # pago iniciado, esperando confirmación de MP
     confirmado = "confirmado"    # pago aprobado
     rechazado = "rechazado"      # pago rechazado o expirado
+
+
+class PlataformaOrigen(str, enum.Enum):
+    discord = "discord"
+    instagram = "instagram"
+    tiktok = "tiktok"
+    web = "web"
 
 
 class Server(Base):
@@ -71,16 +79,18 @@ class Ticket(Base):
     rifa_id = Column(Integer, ForeignKey("rifas.id"), nullable=False)
     codigo = Column(String, nullable=False, index=True)   # TK-XXXX, único por rifa
 
-    # Participante — puede ser usuario de Discord, o anónimo (desde la web)
-    discord_user_id = Column(String, nullable=True)
-    discord_user_name = Column(String, nullable=True)
-    nombre_participante = Column(String, nullable=True)   # para participantes web
-    email_participante = Column(String, nullable=True)    # para notificación por email
-    telefono_participante = Column(String, nullable=True) # para notificación por WhatsApp
+    # Participante
+    plataforma = Column(Enum(PlataformaOrigen), nullable=True)  # origen del participante
+    plataforma_uid = Column(String, nullable=True)               # ID en la plataforma de origen
+    plataforma_handle = Column(String, nullable=True)            # @username o nombre para mostrar
+    nombre_participante = Column(String, nullable=True)          # nombre real (opcional)
+    email_participante = Column(String, nullable=True)           # para notificación por email
+    telefono_participante = Column(String, nullable=True)        # para notificación por WhatsApp
 
     # Pago
     mp_payment_id = Column(String, nullable=True, index=True)
     mp_preference_id = Column(String, nullable=True)
+    mp_payer_email = Column(String, nullable=True)
     estado = Column(Enum(EstadoTicket), default=EstadoTicket.pendiente, nullable=False)
 
     creado_at = Column(DateTime(timezone=True), server_default=func.now())

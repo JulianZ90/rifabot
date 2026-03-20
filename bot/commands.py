@@ -17,9 +17,9 @@ from core.rifa_service import (
     get_mp_token,
     realizar_sorteo,
     cerrar_rifa,
-    borrar_rifa,
+    cancelar_rifa,
 )
-from db.models import Ticket, Rifa, EstadoTicket
+from db.models import Ticket, Rifa, EstadoTicket, PlataformaOrigen
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class RifaBot(commands.Bot):
             codigos = " ".join(f"`{t.codigo}`" for t in tickets)
             cantidad = len(tickets)
             await canal.send(
-                f"✅ <@{tickets[0].discord_user_id}> tu pago fue confirmado! "
+                f"✅ <@{tickets[0].plataforma_uid}> tu pago fue confirmado! "
                 f"Recibiste {cantidad} ticket{'s' if cantidad > 1 else ''} para **{rifa.nombre}**: {codigos} 🎟️"
             )
         except Exception as e:
@@ -190,8 +190,9 @@ async def participar(
                 session=session,
                 rifa_id=rifa_id,
                 cantidad=cantidad,
-                discord_user_id=str(interaction.user.id),
-                discord_user_name=str(interaction.user.display_name),
+                plataforma=PlataformaOrigen.discord,
+                plataforma_uid=str(interaction.user.id),
+                plataforma_handle=str(interaction.user.display_name),
             )
         except ValueError as e:
             await interaction.followup.send(f"❌ {e}", ephemeral=True)
@@ -244,7 +245,7 @@ async def mis_tickets(interaction: discord.Interaction, rifa_id: int):
 
         mis = [
             t for t in rifa.tickets
-            if t.discord_user_id == str(interaction.user.id)
+            if t.plataforma_uid == str(interaction.user.id) and t.plataforma == PlataformaOrigen.discord
         ]
 
     if not mis:
@@ -305,13 +306,18 @@ async def rifa_sortear(interaction: discord.Interaction, rifa_id: int):
         color=discord.Color.green(),
     )
     embed.add_field(name="🎟️ Ticket ganador", value=f"`{ganador.codigo}`", inline=True)
-    if ganador.discord_user_id:
-        embed.add_field(name="👤 Ganador", value=f"<@{ganador.discord_user_id}>", inline=True)
+    if ganador.plataforma == PlataformaOrigen.discord:
+        embed.add_field(name="👤 Ganador", value=f"<@{ganador.plataforma_uid}>", inline=True)
+    elif ganador.plataforma_handle:
+        embed.add_field(name="👤 Ganador", value=f"{ganador.plataforma_handle} ({ganador.plataforma})", inline=True)
     else:
         embed.add_field(name="👤 Ganador", value=ganador.nombre_participante or "Anónimo", inline=True)
     embed.set_footer(text=f"Hash de verificación: {sorteo.hash_resultado[:16]}...")
 
-    mencionar = f"<@{ganador.discord_user_id}>" if ganador.discord_user_id else ganador.nombre_participante
+    if ganador.plataforma == PlataformaOrigen.discord:
+        mencionar = f"<@{ganador.plataforma_uid}>"
+    else:
+        mencionar = ganador.plataforma_handle or ganador.nombre_participante or "el ganador"
     await interaction.followup.send(
         content=f"🎊 ¡Felicitaciones {mencionar}!",
         embed=embed,
@@ -329,40 +335,39 @@ async def rifa_lista(interaction: discord.Interaction):
         await interaction.followup.send("No hay rifas abiertas en este momento.", ephemeral=True)
         return
 
-    texto = "\n".join([
-        f"**ID {r.id}** — {r.nombre} · ${r.precio_ticket}/ticket · "
-        f"{len([t for t in r.tickets if t.estado == EstadoTicket.confirmado])} vendidos"
-        for r in rifas
-    ])
+    es_admin = interaction.user.guild_permissions.administrator
+
+    def linea(r):
+        base = f"**ID {r.id}** — {r.nombre} · ${r.precio_ticket}/ticket"
+        if es_admin:
+            vendidos = len([t for t in r.tickets if t.estado == EstadoTicket.confirmado])
+            pendientes = len([t for t in r.tickets if t.estado == EstadoTicket.pendiente])
+            base += f" · {vendidos} confirmados, {pendientes} pendientes"
+        return base
+
+    texto = "\n".join(linea(r) for r in rifas)
     await interaction.followup.send(f"**Rifas abiertas:**\n{texto}", ephemeral=True)
 
 
-@bot.tree.command(name="rifa_borrar", description="Borra una rifa y todos sus tickets")
+@bot.tree.command(name="rifa_borrar", description="Cancela una rifa (borrado lógico)")
 @app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(rifa_id="ID de la rifa a borrar")
+@app_commands.describe(rifa_id="ID de la rifa a cancelar")
 async def rifa_borrar(interaction: discord.Interaction, rifa_id: int):
     await interaction.response.defer(ephemeral=True)
 
-    async with get_session() as session:
-        rifa = await get_rifa(session, rifa_id)
-        if not rifa:
-            await interaction.followup.send("❌ Rifa no encontrada.", ephemeral=True)
-            return
+    nombre = None
+    try:
+        async with get_session() as session:
+            rifa = await get_rifa(session, rifa_id)
+            if not rifa:
+                await interaction.followup.send("❌ Rifa no encontrada.", ephemeral=True)
+                return
+            nombre = rifa.nombre
+            ok = await cancelar_rifa(session, rifa_id, str(interaction.guild_id))
 
-        nombre = rifa.nombre
-        tickets_confirmados = len([t for t in rifa.tickets if t.estado == EstadoTicket.confirmado])
-
-        if tickets_confirmados > 0:
-            await interaction.followup.send(
-                f"❌ La rifa **{nombre}** tiene {tickets_confirmados} ticket(s) confirmado(s). "
-                f"No se puede borrar una rifa con pagos confirmados.",
-                ephemeral=True,
-            )
-            return
-
-        ok = await borrar_rifa(session, rifa_id, str(interaction.guild_id))
-
-    if ok:
-        await interaction.followup.send(f"🗑️ Rifa **{nombre}** borrada.", ephemeral=True)
-    else:
-        await interaction.followup.send("❌ No se pudo borrar la rifa.", ephemeral=True)
+        if ok:
+            await interaction.followup.send(f"🗑️ Rifa **{nombre}** cancelada.", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ No se pudo cancelar la rifa.", ephemeral=True)
+    except ValueError as e:
+        await interaction.followup.send(f"❌ {e}", ephemeral=True)
