@@ -10,10 +10,7 @@ from db.database import get_session
 from db.models import Server, EstadoRifa, PlataformaOrigen, Ticket
 from core.rifa_service import get_rifa, crear_ticket, asignar_link_pago, confirmar_tickets_gratis, contar_tickets_usuario
 from utils.crypto import decrypt_token
-from web.oauth import (
-    google_auth_url, google_exchange_code,
-    ms_auth_url, ms_exchange_code,
-)
+from web.oauth import google_auth_url, google_exchange_code
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 router = APIRouter()
@@ -190,39 +187,6 @@ async def auth_google_callback(request: Request, code: str = None, state: str = 
     request.session.pop("oauth_nonce", None)
     return RedirectResponse(f"/rifa/{rifa_id}")
 
-
-# ─────────────────────────────────────────────
-# OAUTH — MICROSOFT
-# ─────────────────────────────────────────────
-
-@router.get("/auth/microsoft")
-async def auth_microsoft(request: Request, rifa_id: int):
-    nonce = secrets.token_urlsafe(16)
-    request.session["oauth_nonce"] = nonce
-    request.session["oauth_rifa_id"] = rifa_id
-    return RedirectResponse(ms_auth_url(rifa_id, nonce))
-
-
-@router.get("/auth/microsoft/callback")
-async def auth_microsoft_callback(request: Request, code: str = None, state: str = "", error: str = None):
-    if error or not code:
-        return RedirectResponse("/")
-
-    parts = state.split(":", 1)
-    if len(parts) != 2 or parts[1] != request.session.get("oauth_nonce"):
-        return HTMLResponse("Estado inválido.", status_code=400)
-
-    rifa_id = request.session.get("oauth_rifa_id")
-
-    try:
-        user = await ms_exchange_code(code)
-    except Exception:
-        rifa_id = rifa_id or 1
-        return RedirectResponse(f"/rifa/{rifa_id}?error=microsoft")
-
-    request.session["oauth_user"] = user
-    request.session.pop("oauth_nonce", None)
-    return RedirectResponse(f"/rifa/{rifa_id}")
 
 
 # ─────────────────────────────────────────────
