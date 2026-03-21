@@ -344,6 +344,7 @@ async def realizar_sorteo(session: AsyncSession, rifa_id: int) -> Sorteo | None:
         seed=seed,
         hash_resultado=hash_resultado,
     )
+    sorteo.ticket_ganador = ganador
     session.add(sorteo)
     await session.flush()
     return sorteo
