@@ -58,6 +58,19 @@ async def pagina_rifa(request: Request, rifa_id: int):
 
     oauth_user = request.session.get("oauth_user")
 
+    # Detect if the logged-in admin owns this raffle
+    es_dueno = False
+    if request.session.get("is_admin") and oauth_user:
+        from core.rifa_service import get_web_server_id
+        from db.models import Server
+        async with get_session() as session2:
+            result = await session2.execute(
+                select(Server).where(Server.id == rifa.server_id)
+            )
+            server = result.scalar_one_or_none()
+            if server and server.discord_server_id == get_web_server_id(oauth_user["email"]):
+                es_dueno = True
+
     numeros_ocupados: list[int] = []
     if rifa.es_numerada:
         async with get_session() as session2:
@@ -69,6 +82,7 @@ async def pagina_rifa(request: Request, rifa_id: int):
             "rifa": rifa,
             "oauth_user": oauth_user,
             "numeros_ocupados": numeros_ocupados,
+            "es_dueno": es_dueno,
         }
     )
 
@@ -84,6 +98,18 @@ async def participar(
 
     if not oauth_user:
         return RedirectResponse(f"/rifa/{rifa_id}", status_code=303)
+
+    # Block admins from buying their own raffles
+    if request.session.get("is_admin"):
+        from core.rifa_service import get_web_server_id
+        from db.models import Server
+        async with get_session() as _s:
+            rifa_check = await get_rifa(_s, rifa_id)
+            if rifa_check:
+                r2 = await _s.execute(select(Server).where(Server.id == rifa_check.server_id))
+                srv = r2.scalar_one_or_none()
+                if srv and srv.discord_server_id == get_web_server_id(oauth_user["email"]):
+                    return RedirectResponse(f"/rifa/{rifa_id}", status_code=303)
 
     plataforma = PlataformaOrigen(oauth_user["provider"])
     plataforma_uid = oauth_user.get("uid") or oauth_user["email"]

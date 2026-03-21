@@ -93,7 +93,20 @@
   </div>
   {% endif %}
 
-  {% if oauth_user %}
+  {% if es_dueno %}
+  <!-- ── Admin dueño: solo vista, sin compra ── -->
+  <div class="bg-gray-900 border border-gray-700 rounded-2xl px-5 py-4 flex items-center gap-3">
+    <span class="text-xl">🔒</span>
+    <div>
+      <p class="text-white text-sm font-medium">Esta es tu rifa</p>
+      <p class="text-gray-500 text-xs mt-0.5">Los organizadores no pueden comprar números en sus propias rifas.</p>
+    </div>
+    <a href="/admin/rifas" class="ml-auto text-xs text-indigo-400 hover:text-indigo-300 shrink-0 transition">
+      Ir al panel →
+    </a>
+  </div>
+
+  {% elif oauth_user %}
   <!-- ── Usuario autenticado: mostrar form de compra ── -->
   <div class="flex items-center gap-3 bg-gray-900 rounded-2xl px-4 py-3 mb-5">
     {% if oauth_user.picture %}
