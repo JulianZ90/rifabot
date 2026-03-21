@@ -8,7 +8,7 @@ import random
 import string
 import os
 
-from db.models import Server, Rifa, Ticket, Sorteo, EstadoRifa, EstadoTicket, PlataformaOrigen
+from db.models import Server, Rifa, Ticket, Sorteo, EstadoRifa, EstadoTicket, PlataformaOrigen, AdminUser
 from utils.crypto import encrypt_token, decrypt_token
 from utils.mp import crear_preferencia_pago
 from utils.randomorg import sortear_indice
@@ -41,6 +41,34 @@ async def generar_codigo_unico(session: AsyncSession, rifa_id: int) -> str:
         if await codigo_disponible(session, rifa_id, codigo):
             return codigo
     raise RuntimeError("No se pudo generar un código único. Intentá de nuevo.")
+
+
+# ─────────────────────────────────────────────
+# ADMIN USERS
+# ─────────────────────────────────────────────
+
+async def get_admin_by_email(session: AsyncSession, email: str) -> AdminUser | None:
+    result = await session.execute(
+        select(AdminUser).where(AdminUser.email == email, AdminUser.activo == True)
+    )
+    return result.scalar_one_or_none()
+
+
+def get_web_server_id(email: str) -> str:
+    return f"web:{email}"
+
+
+async def get_rifas_admin(session: AsyncSession, email: str) -> list[Rifa]:
+    """Todas las rifas del admin (todas las abierta y las no-abiertas)."""
+    server_id = get_web_server_id(email)
+    result = await session.execute(
+        select(Rifa)
+        .join(Server)
+        .where(Server.discord_server_id == server_id)
+        .options(selectinload(Rifa.tickets), selectinload(Rifa.sorteo))
+        .order_by(Rifa.created_at.desc())
+    )
+    return result.scalars().all()
 
 
 # ─────────────────────────────────────────────

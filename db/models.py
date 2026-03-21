@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, Enum, DateTime, Numeric, UniqueConstraint
+from sqlalchemy import Column, String, Integer, ForeignKey, Enum, DateTime, Numeric, UniqueConstraint, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 import enum
@@ -27,6 +27,17 @@ class PlataformaOrigen(str, enum.Enum):
     google = "google"
     microsoft = "microsoft"
     facebook = "facebook"
+
+
+class AdminUser(Base):
+    """Admin pre-registrado por email. Se autentica via Google OAuth."""
+    __tablename__ = "admin_users"
+
+    id        = Column(Integer, primary_key=True)
+    email     = Column(String, unique=True, nullable=False, index=True)
+    nombre    = Column(String, nullable=True)
+    activo    = Column(Boolean, default=True, nullable=False)
+    creado_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class Server(Base):

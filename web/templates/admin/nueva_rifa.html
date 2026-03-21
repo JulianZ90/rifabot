@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Nueva Rifa — Admin{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-10">
+  <div class="mb-6">
+    <a href="/admin/rifas" class="text-gray-500 hover:text-gray-300 text-sm transition">← Volver</a>
+  </div>
+  <h1 class="text-2xl font-bold text-white mb-8">Nueva rifa</h1>
+
+  {% if error %}
+  <div class="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-xl mb-6 text-sm">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/admin/nueva-rifa" class="space-y-5">
+    <div>
+      <label class="block text-sm text-gray-400 mb-1.5">Nombre de la rifa *</label>
+      <input type="text" name="nombre" required
+             class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition"
+             placeholder="Ej: Rifa Navidad 2024">
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1.5">Descripción</label>
+      <textarea name="descripcion" rows="3"
+                class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition resize-none"
+                placeholder="Premio, detalles, condiciones..."></textarea>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1.5">Precio por ticket (ARS) *</label>
+      <input type="text" name="precio" required
+             class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition"
+             placeholder="0 para rifa gratis">
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1.5">Máximo de tickets por persona</label>
+      <input type="number" name="max_tickets" value="10" min="1"
+             class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1.5">Fecha de cierre automático (opcional)</label>
+      <input type="datetime-local" name="fecha_cierre"
+             class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
+    </div>
+
+    <div class="pt-2">
+      <button type="submit"
+              class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition">
+        Crear rifa
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

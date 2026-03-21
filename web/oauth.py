@@ -9,13 +9,18 @@ FACEBOOK_APP_SECRET = os.getenv("FACEBOOK_APP_SECRET", "")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "")
 
 
-def google_auth_url(rifa_id: int, nonce: str) -> str:
+def google_auth_url(nonce: str, rifa_id: int = None, next_url: str = None) -> str:
+    # state encodes the context: "rifa:{id}:{nonce}" or "next:{url}:{nonce}"
+    if next_url:
+        state = f"next:{next_url}:{nonce}"
+    else:
+        state = f"rifa:{rifa_id}:{nonce}"
     params = urlencode({
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": f"{WEBHOOK_BASE_URL}/auth/google/callback",
         "response_type": "code",
         "scope": "openid email profile",
-        "state": f"{rifa_id}:{nonce}",
+        "state": state,
         "access_type": "online",
     })
     return f"https://accounts.google.com/o/oauth2/v2/auth?{params}"

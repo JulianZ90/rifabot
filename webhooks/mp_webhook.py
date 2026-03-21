@@ -10,6 +10,7 @@ import logging
 
 from starlette.middleware.sessions import SessionMiddleware
 from web.routes import router as web_router
+from web.admin_routes import admin_router
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ app.add_middleware(
     https_only=False,
 )
 app.include_router(web_router)
+app.include_router(admin_router)
 
 # Referencia al bot de Discord (se inyecta desde main.py)
 _discord_bot = None

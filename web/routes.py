@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from db.database import get_session
 from db.models import Server, EstadoRifa, PlataformaOrigen, Ticket
-from core.rifa_service import get_rifa, crear_ticket, asignar_link_pago, confirmar_tickets_gratis, contar_tickets_usuario
+from core.rifa_service import get_rifa, crear_ticket, asignar_link_pago, confirmar_tickets_gratis, contar_tickets_usuario, get_admin_by_email
 from utils.crypto import decrypt_token
 from web.oauth import google_auth_url, google_exchange_code, fb_auth_url, fb_exchange_code
 
@@ -145,11 +145,15 @@ async def participar(
 # ─────────────────────────────────────────────
 
 @router.get("/auth/google")
-async def auth_google(request: Request, rifa_id: int):
+async def auth_google(request: Request, rifa_id: int = None, next: str = None):
     nonce = secrets.token_urlsafe(16)
     request.session["oauth_nonce"] = nonce
-    request.session["oauth_rifa_id"] = rifa_id
-    return RedirectResponse(google_auth_url(rifa_id, nonce))
+    if next:
+        request.session["oauth_next"] = next
+        return RedirectResponse(google_auth_url(nonce, next_url=next))
+    else:
+        request.session["oauth_rifa_id"] = rifa_id
+        return RedirectResponse(google_auth_url(nonce, rifa_id=rifa_id))
 
 
 @router.get("/auth/google/callback")
@@ -157,21 +161,34 @@ async def auth_google_callback(request: Request, code: str = None, state: str = 
     if error or not code:
         return RedirectResponse("/")
 
-    parts = state.split(":", 1)
-    if len(parts) != 2 or parts[1] != request.session.get("oauth_nonce"):
+    # state format: "rifa:{id}:{nonce}" or "next:{url}:{nonce}"
+    parts = state.split(":", 2)
+    if len(parts) < 3 or parts[2] != request.session.get("oauth_nonce"):
         return HTMLResponse("Estado inválido.", status_code=400)
 
-    rifa_id = request.session.get("oauth_rifa_id")
+    kind = parts[0]
+    context = parts[1]
 
     try:
         user = await google_exchange_code(code)
     except Exception:
-        rifa_id = rifa_id or 1
+        rifa_id = request.session.get("oauth_rifa_id") or 1
         return RedirectResponse(f"/rifa/{rifa_id}?error=google")
 
     request.session["oauth_user"] = user
     request.session.pop("oauth_nonce", None)
-    return RedirectResponse(f"/rifa/{rifa_id}")
+
+    # Check if this user is an admin
+    async with get_session() as session:
+        admin = await get_admin_by_email(session, user["email"])
+    if admin:
+        request.session["is_admin"] = True
+
+    if kind == "next":
+        return RedirectResponse(context)
+    else:
+        rifa_id = request.session.get("oauth_rifa_id") or context
+        return RedirectResponse(f"/rifa/{rifa_id}")
 
 
 
