@@ -12,6 +12,35 @@ from core.rifa_service import (
 )
 from db.models import EstadoTicket
 
+
+# ─────────────────────────────────────────────
+# Rifa.capacidad_total / tickets_confirmados
+# ─────────────────────────────────────────────
+
+async def test_capacidad_total_numerada(session):
+    rifa = await crear_rifa(
+        session, SERVER_ID, "Test", "", Decimal("50"),
+        es_numerada=True, numero_desde=1, numero_hasta=40,
+    )
+    assert rifa.capacidad_total == 40
+
+
+async def test_capacidad_total_no_numerada_es_none(session):
+    rifa = await crear_rifa(session, SERVER_ID, "Test", "", Decimal("50"))
+    assert rifa.capacidad_total is None
+
+
+def test_tickets_confirmados_property():
+    from db.models import Rifa, Ticket
+    rifa = Rifa(es_numerada=True, numero_desde=1, numero_hasta=40)
+    rifa.tickets = [
+        Ticket(estado=EstadoTicket.confirmado, numero_ticket=5),
+        Ticket(estado=EstadoTicket.pendiente, numero_ticket=6),
+        Ticket(estado=EstadoTicket.rechazado, numero_ticket=7),
+    ]
+    assert len(rifa.tickets_confirmados) == 1
+    assert rifa.tickets_confirmados[0].numero_ticket == 5
+
 SERVER_ID = "111222333"
 
 

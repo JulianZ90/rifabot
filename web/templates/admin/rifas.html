@@ -57,8 +57,10 @@
             </span>
           </td>
           <td class="px-6 py-4 text-right text-gray-300">
-            {{ rifa.tickets | selectattr("estado", "equalto", "confirmado") | list | length }}
-            <span class="text-gray-600">/{{ rifa.tickets | length }}</span>
+            {{ rifa.tickets_confirmados | length }}
+            {% if rifa.capacidad_total is not none %}
+            <span class="text-gray-600">/{{ rifa.capacidad_total }}</span>
+            {% endif %}
           </td>
           <td class="px-6 py-4 text-gray-400 text-xs">
             {% if rifa.fecha_cierre %}

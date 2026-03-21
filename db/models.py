@@ -1,3 +1,4 @@
+from __future__ import annotations
 from sqlalchemy import Column, String, Integer, ForeignKey, Enum, DateTime, Numeric, UniqueConstraint, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
@@ -84,6 +85,17 @@ class Rifa(Base):
     server = relationship("Server", back_populates="rifas")
     tickets = relationship("Ticket", back_populates="rifa", lazy="selectin")
     sorteo = relationship("Sorteo", back_populates="rifa", uselist=False, lazy="selectin")
+
+    @property
+    def capacidad_total(self) -> int | None:
+        """Total de números disponibles. None para rifas sin rango fijo."""
+        if self.es_numerada:
+            return self.numero_hasta - self.numero_desde + 1
+        return None
+
+    @property
+    def tickets_confirmados(self) -> list:
+        return [t for t in self.tickets if t.estado == EstadoTicket.confirmado]
 
 
 class Ticket(Base):
