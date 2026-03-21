@@ -21,6 +21,15 @@ async def crear_preferencia_pago(
             "pending": f"{notification_url.rsplit('/webhook', 1)[0]}/pago/pendiente",
         },
         "auto_return": "approved",
+        "payment_methods": {
+            "excluded_payment_types": [
+                {"id": "credit_card"},
+                {"id": "ticket"},
+                {"id": "atm"},
+                {"id": "prepaid_card"},
+            ],
+            "installments": 1,
+        },
     }
     async with httpx.AsyncClient() as client:
         r = await client.post(
