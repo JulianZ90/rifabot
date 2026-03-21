@@ -111,34 +111,6 @@
     </a>
 
 
-<!-- Divider -->
-    <div class="flex items-center gap-3 py-1">
-      <hr class="flex-1 border-gray-800" />
-      <span class="text-xs text-gray-600">o usá tu email</span>
-      <hr class="flex-1 border-gray-800" />
-    </div>
-
-    <!-- Email + cantidad en un solo form -->
-    <form method="POST" action="/rifa/{{ rifa.id }}/participar" class="space-y-3">
-      <input type="email" name="email" required placeholder="tu@email.com"
-             class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 outline-none focus:border-gray-500 transition" />
-      {% if rifa.precio_ticket == 0 %}
-      <input type="hidden" name="cantidad" value="1" />
-      {% else %}
-      <select name="cantidad"
-              class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-gray-500 transition">
-        {% for n in range(1, rifa.max_tickets_por_persona + 1) %}
-        <option value="{{ n }}">
-          {{ n }} ticket{{ 's' if n > 1 else '' }} — ${{ "%.0f"|format(rifa.precio_ticket * n) }} ARS
-        </option>
-        {% endfor %}
-      </select>
-      {% endif %}
-      <button type="submit"
-              class="w-full bg-white text-gray-950 font-semibold rounded-xl py-3 text-sm hover:bg-gray-200 active:scale-95 transition">
-        {% if rifa.precio_ticket == 0 %}Participar →{% else %}Ir al pago →{% endif %}
-      </button>
-    </form>
   </div>
   {% endif %}
 
@@ -156,7 +128,7 @@
   document.querySelectorAll('.local-date[data-utc]').forEach(el => {
     const utc = el.dataset.utc;
     const date = new Date(utc);
-    el.textContent = date.toLocaleString(undefined, {
+    el.textContent = date.toLocaleString('es-AR', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',

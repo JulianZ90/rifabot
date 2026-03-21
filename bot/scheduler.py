@@ -74,20 +74,41 @@ async def postear_ganador(bot: discord.Client, rifa, sorteo):
 
     if sorteo.seed and sorteo.seed.startswith("randomorg:"):
         serial = sorteo.seed.split("serial=")[1].split(":")[0]
-        embed.set_footer(text=f"Verificable en random.org · Serial #{serial}")
+        embed.add_field(
+            name="🔍 Verificación",
+            value=f"Sorteo realizado por [RANDOM.ORG](https://api.random.org/signatures/form)\nSerial: `#{serial}`",
+            inline=False,
+        )
     else:
-        embed.set_footer(text=f"Hash: {sorteo.hash_resultado[:20]}...")
+        embed.set_footer(text=f"Hash local: {sorteo.hash_resultado[:24]}...")
 
     if ganador.plataforma == PlataformaOrigen.discord:
         mencionar = f"<@{ganador.plataforma_uid}>"
     else:
         mencionar = ganador.plataforma_handle or ganador.nombre_participante or "el ganador"
 
-    await canal.send(
-        content=f"🎊 ¡Felicitaciones {mencionar}!",
-        embed=embed,
-    )
-    logger.info(f"Scheduler: ganador de rifa {rifa.id} anunciado en canal {rifa.canal_discord_id}.")
+    try:
+        await canal.send(
+            content=f"🎊 ¡Felicitaciones {mencionar}!",
+            embed=embed,
+        )
+        logger.info(f"Scheduler: ganador de rifa {rifa.id} anunciado en canal {rifa.canal_discord_id}.")
+    except discord.Forbidden:
+        logger.error(
+            f"Scheduler: sin permiso para postear en canal {rifa.canal_discord_id} (rifa {rifa.id}). "
+            f"El sorteo SÍ fue guardado. Ganador: {ganador.codigo}"
+        )
+        # Intentar notificar al owner del servidor
+        guild = canal.guild if hasattr(canal, "guild") else None
+        if guild and guild.owner:
+            try:
+                await guild.owner.send(
+                    f"⚠️ **RifaBot**: el sorteo de la rifa **{rifa.nombre}** se realizó automáticamente "
+                    f"pero no pude postear en el canal <#{rifa.canal_discord_id}> por falta de permisos.\n"
+                    f"🏆 Ganador: ticket `{ganador.codigo}` — {mencionar}"
+                )
+            except Exception:
+                logger.error(f"Scheduler: tampoco pude enviar DM al owner del servidor.")
 
 
 async def notificar_sin_ganador(bot: discord.Client, rifa):

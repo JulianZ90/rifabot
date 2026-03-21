@@ -56,31 +56,17 @@ async def participar(
     request: Request,
     rifa_id: int,
     cantidad: int = Form(...),
-    email: str = Form(None),
 ):
     oauth_user = request.session.get("oauth_user")
 
-    if oauth_user:
-        plataforma = PlataformaOrigen(oauth_user["provider"])
-        plataforma_uid = oauth_user["email"]
-        plataforma_handle = oauth_user["name"]
-        email_participante = oauth_user["email"]
-        nombre_participante = oauth_user["name"]
-    else:
-        email = (email or "").strip()
-        if not email or "@" not in email:
-            async with get_session() as session:
-                rifa = await get_rifa(session, rifa_id)
-            return templates.TemplateResponse(
-                request, "rifa.html",
-                {"rifa": rifa, "oauth_user": None, "error": "Ingresá un email válido."},
-                status_code=422,
-            )
-        plataforma = PlataformaOrigen.web
-        plataforma_uid = email
-        plataforma_handle = email
-        email_participante = email
-        nombre_participante = None
+    if not oauth_user:
+        return RedirectResponse(f"/rifa/{rifa_id}", status_code=303)
+
+    plataforma = PlataformaOrigen(oauth_user["provider"])
+    plataforma_uid = oauth_user["email"]
+    plataforma_handle = oauth_user["name"]
+    email_participante = oauth_user["email"]
+    nombre_participante = oauth_user["name"]
 
     async with get_session() as session:
         rifa = await get_rifa(session, rifa_id)
