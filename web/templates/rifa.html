@@ -39,7 +39,9 @@
     {% if rifa.fecha_cierre %}
     <div class="flex items-center justify-between text-sm">
       <span class="text-gray-400">Cierre</span>
-      <span class="text-white">{{ rifa.fecha_cierre.strftime("%d/%m/%Y %H:%M") }}</span>
+      <span class="text-white local-date" data-utc="{{ rifa.fecha_cierre.strftime('%Y-%m-%dT%H:%M:%SZ') }}">
+        {{ rifa.fecha_cierre.strftime("%d/%m/%Y %H:%M") }} UTC
+      </span>
     </div>
     {% endif %}
   </div>
@@ -147,4 +149,20 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('.local-date[data-utc]').forEach(el => {
+    const utc = el.dataset.utc;
+    const date = new Date(utc);
+    el.textContent = date.toLocaleString(undefined, {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  });
+</script>
 {% endblock %}
