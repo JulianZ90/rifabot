@@ -4,6 +4,8 @@ import httpx
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID", "")
+FACEBOOK_APP_SECRET = os.getenv("FACEBOOK_APP_SECRET", "")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "")
 
 
@@ -43,8 +45,48 @@ async def google_exchange_code(code: str) -> dict:
         raise ValueError("Email de Google no verificado.")
 
     return {
+        "uid": data["email"],
         "email": data["email"],
         "name": data.get("name", data["email"]),
         "picture": data.get("picture"),
         "provider": "google",
+    }
+
+
+def fb_auth_url(rifa_id: int, nonce: str) -> str:
+    params = urlencode({
+        "client_id": FACEBOOK_APP_ID,
+        "redirect_uri": f"{WEBHOOK_BASE_URL}/auth/facebook/callback",
+        "scope": "email,public_profile",
+        "state": f"{rifa_id}:{nonce}",
+        "response_type": "code",
+    })
+    return f"https://www.facebook.com/v19.0/dialog/oauth?{params}"
+
+
+async def fb_exchange_code(code: str) -> dict:
+    """Retorna {"uid", "email", "name", "picture", "provider"}."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get("https://graph.facebook.com/v19.0/oauth/access_token", params={
+            "client_id": FACEBOOK_APP_ID,
+            "client_secret": FACEBOOK_APP_SECRET,
+            "redirect_uri": f"{WEBHOOK_BASE_URL}/auth/facebook/callback",
+            "code": code,
+        })
+        r.raise_for_status()
+        access_token = r.json()["access_token"]
+
+        r = await client.get("https://graph.facebook.com/me", params={
+            "fields": "id,name,email",
+            "access_token": access_token,
+        })
+        r.raise_for_status()
+        data = r.json()
+
+    return {
+        "uid": data["id"],
+        "email": data.get("email"),
+        "name": data.get("name", f"Usuario Facebook {data['id']}"),
+        "picture": None,
+        "provider": "facebook",
     }
