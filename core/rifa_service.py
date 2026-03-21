@@ -117,7 +117,19 @@ async def crear_rifa(
     max_tickets_por_persona: int = 10,
     canal_id: str = None,
     fecha_cierre: datetime = None,
+    es_numerada: bool = False,
+    numero_desde: int = None,
+    numero_hasta: int = None,
 ) -> Rifa:
+    if es_numerada:
+        if numero_desde is None or numero_hasta is None:
+            raise ValueError("Una rifa numerada requiere numero_desde y numero_hasta.")
+        if numero_desde > numero_hasta:
+            raise ValueError("numero_desde debe ser menor o igual a numero_hasta.")
+        total_numeros = numero_hasta - numero_desde + 1
+        if max_tickets_por_persona > total_numeros:
+            max_tickets_por_persona = total_numeros
+
     server = await get_or_create_server(session, discord_server_id)
     rifa = Rifa(
         server_id=server.id,
@@ -128,6 +140,9 @@ async def crear_rifa(
         canal_discord_id=canal_id,
         fecha_cierre=fecha_cierre,
         estado=EstadoRifa.abierta,
+        es_numerada=es_numerada,
+        numero_desde=numero_desde,
+        numero_hasta=numero_hasta,
     )
     session.add(rifa)
     await session.flush()
@@ -215,6 +230,34 @@ async def cancelar_rifa(session: AsyncSession, rifa_id: int, discord_server_id: 
 # TICKETS
 # ─────────────────────────────────────────────
 
+async def get_numeros_ocupados(session: AsyncSession, rifa_id: int) -> list[int]:
+    """Returns list of ticket numbers already reserved (pendiente or confirmado)."""
+    result = await session.execute(
+        select(Ticket.numero_ticket).where(
+            and_(
+                Ticket.rifa_id == rifa_id,
+                Ticket.numero_ticket.isnot(None),
+                Ticket.estado.in_([EstadoTicket.pendiente, EstadoTicket.confirmado]),
+            )
+        )
+    )
+    return [row[0] for row in result.all()]
+
+
+async def numero_disponible(session: AsyncSession, rifa_id: int, numero: int) -> bool:
+    """Returns True if the given number is not yet taken in the rifa."""
+    result = await session.execute(
+        select(Ticket.id).where(
+            and_(
+                Ticket.rifa_id == rifa_id,
+                Ticket.numero_ticket == numero,
+                Ticket.estado.in_([EstadoTicket.pendiente, EstadoTicket.confirmado]),
+            )
+        )
+    )
+    return result.scalar_one_or_none() is None
+
+
 async def contar_tickets_usuario(session: AsyncSession, rifa_id: int, plataforma_uid: str) -> int:
     result = await session.execute(
         select(func.count(Ticket.id)).where(
@@ -238,10 +281,24 @@ async def crear_ticket(
     nombre_participante: str = None,
     email_participante: str = None,
     telefono_participante: str = None,
+    numeros: list[int] = None,
 ) -> list[Ticket]:
     rifa = await get_rifa(session, rifa_id)
     if not rifa or rifa.estado != EstadoRifa.abierta:
         raise ValueError("La rifa no existe o no está abierta.")
+
+    if rifa.es_numerada:
+        if not numeros:
+            raise ValueError("Esta rifa es numerada. Debés especificar los números.")
+        cantidad = len(numeros)
+        for n in numeros:
+            if n < rifa.numero_desde or n > rifa.numero_hasta:
+                raise ValueError(
+                    f"El número {n} está fuera del rango "
+                    f"({rifa.numero_desde}–{rifa.numero_hasta})."
+                )
+            if not await numero_disponible(session, rifa_id, n):
+                raise ValueError(f"El número {n} ya está ocupado.")
 
     if plataforma_uid:
         tickets_actuales = await contar_tickets_usuario(session, rifa_id, plataforma_uid)
@@ -253,7 +310,7 @@ async def crear_ticket(
             )
 
     tickets = []
-    for _ in range(cantidad):
+    for i in range(cantidad):
         codigo = await generar_codigo_unico(session, rifa_id)
         ticket = Ticket(
             rifa_id=rifa_id,
@@ -265,6 +322,7 @@ async def crear_ticket(
             email_participante=email_participante,
             telefono_participante=telefono_participante,
             estado=EstadoTicket.pendiente,
+            numero_ticket=numeros[i] if numeros else None,
         )
         session.add(ticket)
         tickets.append(ticket)

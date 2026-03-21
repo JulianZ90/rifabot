@@ -47,6 +47,30 @@
              class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
     </div>
 
+    <!-- Rifa numerada toggle -->
+    <div class="bg-gray-900 rounded-xl p-4 border border-gray-700">
+      <label class="flex items-center gap-3 cursor-pointer select-none">
+        <input type="checkbox" name="es_numerada" id="es_numerada"
+               class="w-4 h-4 rounded accent-indigo-500"
+               onchange="document.getElementById('rango-numeros').classList.toggle('hidden', !this.checked)">
+        <span class="text-sm text-white font-medium">Rifa numerada</span>
+        <span class="text-xs text-gray-500">Los participantes eligen números específicos</span>
+      </label>
+
+      <div id="rango-numeros" class="hidden mt-4 grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Número inicial</label>
+          <input type="number" name="numero_desde" min="0" placeholder="0"
+                 class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Número final</label>
+          <input type="number" name="numero_hasta" min="1" placeholder="99"
+                 class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 transition">
+        </div>
+      </div>
+    </div>
+
     <div class="pt-2">
       <button type="submit"
               class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition">

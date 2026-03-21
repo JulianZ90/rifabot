@@ -144,6 +144,7 @@ async def rifa_setup(interaction: discord.Interaction, access_token: str):
     descripcion="Descripción del premio (opcional)",
     max_tickets="Máximo de tickets por persona (default: 10)",
     fecha_cierre="Sorteo automático: DD/MM/YYYY HH:MM hora Argentina (ej: 25/03/2024 20:00)",
+    numeros="Rango de números para rifa numerada, ej: 1-60 (opcional)",
 )
 async def rifa_crear(
     interaction: discord.Interaction,
@@ -152,6 +153,7 @@ async def rifa_crear(
     descripcion: str = "",
     max_tickets: int = 10,
     fecha_cierre: str = None,
+    numeros: str = None,
 ):
     await interaction.response.defer()
 
@@ -163,6 +165,22 @@ async def rifa_crear(
             await interaction.followup.send(f"❌ {e}", ephemeral=True)
             return
 
+    es_numerada = False
+    num_desde = num_hasta = None
+    if numeros:
+        try:
+            partes = numeros.strip().split("-")
+            if len(partes) != 2:
+                raise ValueError
+            num_desde, num_hasta = int(partes[0].strip()), int(partes[1].strip())
+            es_numerada = True
+        except ValueError:
+            await interaction.followup.send(
+                "❌ Formato de rango inválido. Usá el formato `desde-hasta`, ej: `1-60`.",
+                ephemeral=True,
+            )
+            return
+
     async with get_session() as session:
         mp_token = await get_mp_token(session, str(interaction.guild_id))
         if not mp_token:
@@ -172,20 +190,29 @@ async def rifa_crear(
             )
             return
 
-        rifa = await crear_rifa(
-            session=session,
-            discord_server_id=str(interaction.guild_id),
-            nombre=nombre,
-            descripcion=descripcion,
-            precio=Decimal(str(precio)),
-            max_tickets_por_persona=max_tickets,
-            canal_id=str(interaction.channel_id),
-            fecha_cierre=cierre_dt,
-        )
+        try:
+            rifa = await crear_rifa(
+                session=session,
+                discord_server_id=str(interaction.guild_id),
+                nombre=nombre,
+                descripcion=descripcion,
+                precio=Decimal(str(precio)),
+                max_tickets_por_persona=max_tickets,
+                canal_id=str(interaction.channel_id),
+                fecha_cierre=cierre_dt,
+                es_numerada=es_numerada,
+                numero_desde=num_desde,
+                numero_hasta=num_hasta,
+            )
+        except ValueError as e:
+            await interaction.followup.send(f"❌ {e}", ephemeral=True)
+            return
+
         rifa = await get_rifa(session, rifa.id)  # reload con tickets cargados
 
         embed = crear_embed_rifa(rifa)
-        embed.description = (embed.description or "") + f"\n\n🎉 ¡Nueva rifa abierta! Usá `/participar rifa_id:{rifa.id}` para comprar tickets."
+        sufijo = f" (números {num_desde}–{num_hasta})" if es_numerada else ""
+        embed.description = (embed.description or "") + f"\n\n🎉 ¡Nueva rifa abierta{sufijo}! Usá `/participar rifa_id:{rifa.id}` para comprar tickets."
         mensaje = await interaction.followup.send(embed=embed)
         rifa.mensaje_discord_id = str(mensaje.id)
 
@@ -193,18 +220,33 @@ async def rifa_crear(
 @bot.tree.command(name="participar", description="Comprá tickets para una rifa")
 @app_commands.describe(
     rifa_id="ID de la rifa",
-    cantidad="Cantidad de tickets a comprar (default: 1)",
+    cantidad="Cantidad de tickets a comprar (default: 1, ignorado en rifas numeradas)",
+    numeros="Para rifas numeradas: números separados por comas, ej: 5,12,33",
 )
 async def participar(
     interaction: discord.Interaction,
     rifa_id: int,
     cantidad: int = 1,
+    numeros: str = None,
 ):
     await interaction.response.defer(ephemeral=True)
 
-    if cantidad < 1 or cantidad > 50:
-        await interaction.followup.send("❌ La cantidad debe ser entre 1 y 50.", ephemeral=True)
-        return
+    # Parse numbers for numbered rifas
+    numeros_lista: list[int] | None = None
+    if numeros:
+        try:
+            numeros_lista = [int(x.strip()) for x in numeros.split(",") if x.strip()]
+            if not numeros_lista:
+                raise ValueError
+        except ValueError:
+            await interaction.followup.send(
+                "❌ Formato de números inválido. Usá: `5,12,33`", ephemeral=True
+            )
+            return
+    else:
+        if cantidad < 1 or cantidad > 50:
+            await interaction.followup.send("❌ La cantidad debe ser entre 1 y 50.", ephemeral=True)
+            return
 
     async with get_session() as session:
         mp_token = await get_mp_token(session, str(interaction.guild_id))
@@ -222,6 +264,7 @@ async def participar(
                 plataforma=PlataformaOrigen.discord,
                 plataforma_uid=str(interaction.user.id),
                 plataforma_handle=str(interaction.user.display_name),
+                numeros=numeros_lista,
             )
         except ValueError as e:
             await interaction.followup.send(f"❌ {e}", ephemeral=True)
@@ -236,14 +279,20 @@ async def participar(
             rifa=rifa,
         )
 
-    total = float(rifa.precio_ticket) * cantidad
+    qty = len(tickets)
+    total = float(rifa.precio_ticket) * qty
     codigos = " ".join(f"`{t.codigo}`" for t in tickets)
+    numeros_desc = ""
+    if rifa.es_numerada:
+        nums = ", ".join(str(t.numero_ticket) for t in tickets)
+        numeros_desc = f"\n**Tus números:** {nums}\n"
 
     embed = discord.Embed(
         title="🎟️ Tickets reservados",
         description=(
-            f"Reservaste **{cantidad} ticket{'s' if cantidad > 1 else ''}** para **{rifa.nombre}**.\n\n"
-            f"**Tus códigos:** {codigos}\n\n"
+            f"Reservaste **{qty} ticket{'s' if qty > 1 else ''}** para **{rifa.nombre}**.\n\n"
+            f"**Tus códigos:** {codigos}\n"
+            f"{numeros_desc}\n"
             f"Completá el pago para confirmar tu participación."
         ),
         color=discord.Color.yellow(),

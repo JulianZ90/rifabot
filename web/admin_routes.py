@@ -67,45 +67,61 @@ async def admin_nueva_rifa_submit(
     precio: str = Form(...),
     max_tickets: int = Form(10),
     fecha_cierre: str = Form(""),
+    es_numerada: str = Form(""),
+    numero_desde: str = Form(""),
+    numero_hasta: str = Form(""),
 ):
     user = _get_admin_user(request)
     if not user:
         return RedirectResponse("/admin/login")
 
+    def error(msg):
+        return templates.TemplateResponse(
+            request, "admin/nueva_rifa.html",
+            {"user": user, "error": msg},
+            status_code=422,
+        )
+
     try:
         precio_decimal = Decimal(precio.replace(",", "."))
     except InvalidOperation:
-        return templates.TemplateResponse(
-            request, "admin/nueva_rifa.html",
-            {"user": user, "error": "Precio inválido."},
-            status_code=422,
-        )
+        return error("Precio inválido.")
 
     fecha = None
     if fecha_cierre.strip():
         try:
             fecha = datetime.fromisoformat(fecha_cierre).replace(tzinfo=timezone.utc)
         except ValueError:
-            return templates.TemplateResponse(
-                request, "admin/nueva_rifa.html",
-                {"user": user, "error": "Fecha de cierre inválida."},
-                status_code=422,
-            )
+            return error("Fecha de cierre inválida.")
+
+    numerada = es_numerada == "on"
+    num_desde = num_hasta = None
+    if numerada:
+        try:
+            num_desde = int(numero_desde)
+            num_hasta = int(numero_hasta)
+        except (ValueError, TypeError):
+            return error("Para rifas numeradas debés indicar el rango de números.")
 
     server_id = get_web_server_id(user["email"])
-    async with get_session() as session:
-        rifa = await crear_rifa(
-            session=session,
-            discord_server_id=server_id,
-            nombre=nombre,
-            descripcion=descripcion,
-            precio=precio_decimal,
-            max_tickets_por_persona=max_tickets,
-            fecha_cierre=fecha,
-        )
-        rifa_id = rifa.id
+    try:
+        async with get_session() as session:
+            rifa = await crear_rifa(
+                session=session,
+                discord_server_id=server_id,
+                nombre=nombre,
+                descripcion=descripcion,
+                precio=precio_decimal,
+                max_tickets_por_persona=max_tickets,
+                fecha_cierre=fecha,
+                es_numerada=numerada,
+                numero_desde=num_desde,
+                numero_hasta=num_hasta,
+            )
+    except ValueError as e:
+        return error(str(e))
 
-    return RedirectResponse(f"/admin/rifas", status_code=303)
+    return RedirectResponse("/admin/rifas", status_code=303)
 
 
 @admin_router.post("/rifa/{rifa_id}/sortear")

@@ -2,7 +2,7 @@
 {% block title %}{{ rifa.nombre }} — Encapsulados{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto px-4 py-12">
+<div class="max-w-2xl mx-auto px-4 py-12">
 
   <!-- Header -->
   <div class="text-center mb-8">
@@ -23,19 +23,23 @@
     <hr class="border-gray-800" />
     {% endif %}
     <div class="flex items-center justify-between text-sm">
-      <span class="text-gray-400">Precio por ticket</span>
+      <span class="text-gray-400">Precio por número</span>
       {% if rifa.precio_ticket == 0 %}
       <span class="text-green-400 font-bold">¡GRATIS!</span>
       {% else %}
       <span class="text-white font-semibold">${{ "%.0f"|format(rifa.precio_ticket) }} ARS</span>
       {% endif %}
     </div>
-    {% if rifa.precio_ticket > 0 %}
+    {% if rifa.es_numerada %}
     <div class="flex items-center justify-between text-sm">
-      <span class="text-gray-400">Máximo por persona</span>
-      <span class="text-white">{{ rifa.max_tickets_por_persona }} tickets</span>
+      <span class="text-gray-400">Rango de números</span>
+      <span class="text-white">{{ rifa.numero_desde }} – {{ rifa.numero_hasta }}</span>
     </div>
     {% endif %}
+    <div class="flex items-center justify-between text-sm">
+      <span class="text-gray-400">Máximo por persona</span>
+      <span class="text-white">{{ rifa.max_tickets_por_persona }} número{{ 's' if rifa.max_tickets_por_persona != 1 else '' }}</span>
+    </div>
     {% if rifa.fecha_cierre %}
     <div class="flex items-center justify-between text-sm">
       <span class="text-gray-400">Cierre</span>
@@ -50,6 +54,42 @@
   {% if error %}
   <div class="bg-red-900/40 border border-red-700 text-red-300 rounded-xl px-4 py-3 text-sm mb-4">
     {{ error }}
+  </div>
+  {% endif %}
+
+  {% if rifa.es_numerada %}
+  <!-- ── Grilla de números ── -->
+  <div class="mb-6">
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-xs uppercase tracking-widest text-gray-500">Elegí tus números</p>
+      <div class="flex items-center gap-3 text-xs text-gray-500">
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-gray-700 inline-block"></span>Libre</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-indigo-600 inline-block"></span>Seleccionado</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-gray-800 border border-gray-700 inline-block opacity-50"></span>Ocupado</span>
+      </div>
+    </div>
+
+    <div id="grid" class="grid gap-1.5"
+         style="grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));">
+      {% for n in range(rifa.numero_desde, rifa.numero_hasta + 1) %}
+      {% set ocupado = n in numeros_ocupados %}
+      <button
+        type="button"
+        data-numero="{{ n }}"
+        {% if ocupado %}disabled{% endif %}
+        class="numero-btn relative h-12 rounded-lg text-sm font-semibold transition
+               {% if ocupado %}bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700
+               {% else %}bg-gray-700 text-white hover:bg-gray-600 cursor-pointer{% endif %}">
+        {{ n }}
+        <!-- Presence avatars container -->
+        <div class="presence-avatars absolute -top-1.5 -right-1.5 flex -space-x-1" data-n="{{ n }}"></div>
+      </button>
+      {% endfor %}
+    </div>
+
+    <p class="text-xs text-gray-600 mt-3 text-center">
+      Seleccionados: <span id="seleccion-count">0</span> / {{ rifa.max_tickets_por_persona }}
+    </p>
   </div>
   {% endif %}
 
@@ -71,9 +111,20 @@
        class="text-xs text-gray-600 hover:text-gray-400 transition shrink-0">Cambiar</a>
   </div>
 
-  <form method="POST" action="/rifa/{{ rifa.id }}/participar" class="space-y-4">
-    {% if rifa.precio_ticket == 0 %}
+  <form id="participar-form" method="POST" action="/rifa/{{ rifa.id }}/participar" class="space-y-4">
+    {% if rifa.es_numerada %}
+    <input type="hidden" name="numeros_str" id="numeros_str" value="" />
+    <button type="submit" id="btn-submit" disabled
+            class="w-full bg-white text-gray-950 font-semibold rounded-xl py-3 text-sm
+                   hover:bg-gray-200 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed">
+      Seleccioná al menos un número →
+    </button>
+    {% elif rifa.precio_ticket == 0 %}
     <input type="hidden" name="cantidad" value="1" />
+    <button type="submit"
+            class="w-full bg-white text-gray-950 font-semibold rounded-xl py-3 text-sm hover:bg-gray-200 active:scale-95 transition">
+      Participar →
+    </button>
     {% else %}
     <div>
       <label for="cantidad" class="block text-xs uppercase tracking-widest text-gray-500 mb-2">Cantidad de tickets</label>
@@ -86,11 +137,11 @@
         {% endfor %}
       </select>
     </div>
-    {% endif %}
     <button type="submit"
             class="w-full bg-white text-gray-950 font-semibold rounded-xl py-3 text-sm hover:bg-gray-200 active:scale-95 transition">
-      {% if rifa.precio_ticket == 0 %}Participar →{% else %}Ir al pago →{% endif %}
+      Ir al pago →
     </button>
+    {% endif %}
   </form>
 
   {% else %}
@@ -105,7 +156,7 @@
         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84z"/>
       </svg>
       Continuar con Google
     </a>
@@ -134,15 +185,106 @@
 {% block scripts %}
 <script>
   document.querySelectorAll('.local-date[data-utc]').forEach(el => {
-    const utc = el.dataset.utc;
-    const date = new Date(utc);
+    const date = new Date(el.dataset.utc);
     el.textContent = date.toLocaleString('es-AR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
     });
   });
 </script>
+
+{% if rifa.es_numerada %}
+<script>
+(function() {
+  const RIFA_ID = {{ rifa.id }};
+  const MAX = {{ rifa.max_tickets_por_persona }};
+  // Anonymous presence uid: generate once per session
+  const MY_UID = (() => {
+    let k = sessionStorage.getItem('presence_uid');
+    if (!k) { k = Math.random().toString(36).slice(2, 10); sessionStorage.setItem('presence_uid', k); }
+    return k;
+  })();
+
+  const selected = new Set();
+  const btnSubmit = document.getElementById('btn-submit');
+  const numInput = document.getElementById('numeros_str');
+  const countEl = document.getElementById('seleccion-count');
+
+  function updateUI() {
+    const n = selected.size;
+    countEl.textContent = n;
+    if (btnSubmit) {
+      btnSubmit.disabled = n === 0;
+      btnSubmit.textContent = n === 0
+        ? 'Seleccioná al menos un número →'
+        : `Ir al pago (${n} número${n > 1 ? 's' : ''} · $${({{ rifa.precio_ticket }} * n).toLocaleString('es-AR')}) →`;
+    }
+    if (numInput) numInput.value = [...selected].join(',');
+    broadcastPresence();
+  }
+
+  document.querySelectorAll('.numero-btn:not([disabled])').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const n = parseInt(btn.dataset.numero);
+      if (selected.has(n)) {
+        selected.delete(n);
+        btn.classList.remove('bg-indigo-600', 'ring-2', 'ring-indigo-400');
+        btn.classList.add('bg-gray-700', 'hover:bg-gray-600');
+      } else {
+        if (selected.size >= MAX) return;
+        selected.add(n);
+        btn.classList.add('bg-indigo-600', 'ring-2', 'ring-indigo-400');
+        btn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
+      }
+      updateUI();
+    });
+  });
+
+  // ── Presence via SSE ──
+  function broadcastPresence() {
+    fetch(`/rifa/${RIFA_ID}/presence/select`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid: MY_UID, numeros: [...selected] }),
+    }).catch(() => {});
+  }
+
+  function renderPresence(snapshot) {
+    // snapshot: { "42": [{uid, color, initials}, ...], ... }
+    document.querySelectorAll('.presence-avatars').forEach(el => {
+      const n = parseInt(el.dataset.n);
+      const viewers = (snapshot[n] || []).filter(v => v.uid !== MY_UID);
+      el.innerHTML = '';
+      viewers.slice(0, 3).forEach((v, i) => {
+        const avatar = document.createElement('div');
+        avatar.className = 'w-4 h-4 rounded-full text-white flex items-center justify-center text-[8px] font-bold border border-gray-900';
+        avatar.style.cssText = `background:${v.color};z-index:${10-i}`;
+        avatar.textContent = v.initials;
+        avatar.title = `Alguien está mirando el ${n}`;
+        el.appendChild(avatar);
+      });
+      if (viewers.length > 3) {
+        const more = document.createElement('div');
+        more.className = 'w-4 h-4 rounded-full bg-gray-600 text-white flex items-center justify-center text-[7px] font-bold border border-gray-900';
+        more.textContent = `+${viewers.length - 3}`;
+        el.appendChild(more);
+      }
+    });
+  }
+
+  const evtSource = new EventSource(`/rifa/${RIFA_ID}/presence/stream`);
+  evtSource.onmessage = e => {
+    try { renderPresence(JSON.parse(e.data)); } catch (_) {}
+  };
+  window.addEventListener('beforeunload', () => {
+    // Clear our presence
+    navigator.sendBeacon(
+      `/rifa/${RIFA_ID}/presence/select`,
+      JSON.stringify({ uid: MY_UID, numeros: [] })
+    );
+    evtSource.close();
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

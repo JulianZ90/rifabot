@@ -1,16 +1,27 @@
+import asyncio
+import json
 import os
 import secrets
 from fastapi import APIRouter, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from sqlalchemy import select
 
 from db.database import get_session
 from db.models import Server, EstadoRifa, PlataformaOrigen, Ticket
-from core.rifa_service import get_rifa, crear_ticket, asignar_link_pago, confirmar_tickets_gratis, contar_tickets_usuario, get_admin_by_email
+from core.rifa_service import (
+    get_rifa,
+    crear_ticket,
+    asignar_link_pago,
+    confirmar_tickets_gratis,
+    contar_tickets_usuario,
+    get_admin_by_email,
+    get_numeros_ocupados,
+)
 from utils.crypto import decrypt_token
 from web.oauth import google_auth_url, google_exchange_code, fb_auth_url, fb_exchange_code
+from web.presence import get_presence_snapshot, update_presence, clear_presence, _sse_queues
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 router = APIRouter()
@@ -46,8 +57,19 @@ async def pagina_rifa(request: Request, rifa_id: int):
         )
 
     oauth_user = request.session.get("oauth_user")
+
+    numeros_ocupados: list[int] = []
+    if rifa.es_numerada:
+        async with get_session() as session2:
+            numeros_ocupados = await get_numeros_ocupados(session2, rifa_id)
+
     return templates.TemplateResponse(
-        request, "rifa.html", {"rifa": rifa, "oauth_user": oauth_user}
+        request, "rifa.html",
+        {
+            "rifa": rifa,
+            "oauth_user": oauth_user,
+            "numeros_ocupados": numeros_ocupados,
+        }
     )
 
 
@@ -55,7 +77,8 @@ async def pagina_rifa(request: Request, rifa_id: int):
 async def participar(
     request: Request,
     rifa_id: int,
-    cantidad: int = Form(...),
+    cantidad: int = Form(None),
+    numeros_str: str = Form(""),
 ):
     oauth_user = request.session.get("oauth_user")
 
@@ -68,21 +91,33 @@ async def participar(
     email_participante = oauth_user.get("email")
     nombre_participante = oauth_user["name"]
 
+    # Parse numeros_str for numbered rifas ("42,43,5")
+    numeros: list[int] | None = None
+    if numeros_str.strip():
+        try:
+            numeros = [int(x) for x in numeros_str.split(",") if x.strip()]
+        except ValueError:
+            numeros = None
+
     async with get_session() as session:
         rifa = await get_rifa(session, rifa_id)
         if not rifa or rifa.estado != EstadoRifa.abierta:
             return HTMLResponse("<h1>Rifa no disponible.</h1>", status_code=404)
 
         es_gratis = rifa.precio_ticket == 0
+        numeros_ocupados = await get_numeros_ocupados(session, rifa_id) if rifa.es_numerada else []
 
-        if es_gratis:
+        def rifa_ctx(extra: dict = {}):
+            return {"rifa": rifa, "oauth_user": oauth_user,
+                    "numeros_ocupados": numeros_ocupados, **extra}
+
+        if es_gratis and not rifa.es_numerada:
             cantidad = 1
             ya_participa = await contar_tickets_usuario(session, rifa_id, plataforma_uid)
             if ya_participa > 0:
                 return templates.TemplateResponse(
                     request, "rifa.html",
-                    {"rifa": rifa, "oauth_user": oauth_user,
-                     "error": "Ya estás participando en esta rifa."},
+                    rifa_ctx({"error": "Ya estás participando en esta rifa."}),
                     status_code=422,
                 )
 
@@ -98,8 +133,7 @@ async def participar(
             if not mp_token:
                 return templates.TemplateResponse(
                     request, "rifa.html",
-                    {"rifa": rifa, "oauth_user": oauth_user,
-                     "error": "Esta rifa no tiene pagos configurados todavía."},
+                    rifa_ctx({"error": "Esta rifa no tiene pagos configurados todavía."}),
                     status_code=503,
                 )
 
@@ -107,19 +141,24 @@ async def participar(
             tickets = await crear_ticket(
                 session=session,
                 rifa_id=rifa_id,
-                cantidad=cantidad,
+                cantidad=cantidad or 1,
                 plataforma=plataforma,
                 plataforma_uid=plataforma_uid,
                 plataforma_handle=plataforma_handle,
                 nombre_participante=nombre_participante,
                 email_participante=email_participante,
+                numeros=numeros,
             )
         except ValueError as e:
             return templates.TemplateResponse(
                 request, "rifa.html",
-                {"rifa": rifa, "oauth_user": oauth_user, "error": str(e)},
+                rifa_ctx({"error": str(e)}),
                 status_code=422,
             )
+
+        # Clear presence for selected numbers after purchase
+        if rifa.es_numerada and numeros:
+            await clear_presence(rifa_id, plataforma_uid)
 
         if es_gratis:
             await confirmar_tickets_gratis(session, tickets)
@@ -138,6 +177,54 @@ async def participar(
         )
 
     return RedirectResponse(init_point, status_code=303)
+
+
+# ─────────────────────────────────────────────
+# PRESENCE — SSE + select
+# ─────────────────────────────────────────────
+
+@router.get("/rifa/{rifa_id}/presence/stream")
+async def presence_stream(request: Request, rifa_id: int):
+    queue: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _sse_queues[rifa_id].append(queue)
+
+    async def event_gen():
+        try:
+            # Send initial snapshot
+            snapshot = get_presence_snapshot(rifa_id)
+            yield f"data: {json.dumps(snapshot)}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=25)
+                    yield f"data: {json.dumps(data)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"  # keep-alive comment
+        finally:
+            try:
+                _sse_queues[rifa_id].remove(queue)
+            except ValueError:
+                pass
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/rifa/{rifa_id}/presence/select")
+async def presence_select(request: Request, rifa_id: int):
+    body = await request.json()
+    uid = body.get("uid", "")
+    numeros = body.get("numeros", [])
+    if uid:
+        await update_presence(rifa_id, uid, numeros)
+    return {"ok": True}
 
 
 # ─────────────────────────────────────────────

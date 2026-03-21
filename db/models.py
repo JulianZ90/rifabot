@@ -76,6 +76,11 @@ class Rifa(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     cerrada_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Rifas numeradas: el participante elige números específicos del rango [numero_desde, numero_hasta]
+    es_numerada = Column(Boolean, default=False, nullable=False)
+    numero_desde = Column(Integer, nullable=True)
+    numero_hasta = Column(Integer, nullable=True)
+
     server = relationship("Server", back_populates="rifas")
     tickets = relationship("Ticket", back_populates="rifa", lazy="selectin")
     sorteo = relationship("Sorteo", back_populates="rifa", uselist=False, lazy="selectin")
@@ -106,6 +111,8 @@ class Ticket(Base):
     mp_preference_id = Column(String, nullable=True)
     mp_payer_email = Column(String, nullable=True)
     estado = Column(Enum(EstadoTicket), default=EstadoTicket.pendiente, nullable=False)
+
+    numero_ticket = Column(Integer, nullable=True)  # Solo para rifas numeradas
 
     creado_at = Column(DateTime(timezone=True), server_default=func.now())
     confirmado_at = Column(DateTime(timezone=True), nullable=True)
