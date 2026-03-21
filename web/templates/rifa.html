@@ -272,12 +272,43 @@
     });
   }
 
+  function markOccupied(numeros) {
+    numeros.forEach(n => {
+      const btn = document.querySelector(`.numero-btn[data-numero="${n}"]`);
+      if (!btn || btn.disabled) return;
+      btn.disabled = true;
+      btn.classList.remove(
+        'bg-gray-700', 'hover:bg-gray-600', 'cursor-pointer',
+        'bg-indigo-600', 'ring-2', 'ring-indigo-400'
+      );
+      btn.classList.add('bg-gray-800', 'text-gray-600', 'cursor-not-allowed', 'border', 'border-gray-700');
+      // Remove from selection if it was selected
+      if (selected.has(n)) {
+        selected.delete(n);
+        updateUI();
+      }
+      // Clear presence avatars
+      const av = btn.querySelector('.presence-avatars');
+      if (av) av.innerHTML = '';
+    });
+  }
+
   const evtSource = new EventSource(`/rifa/${RIFA_ID}/presence/stream`);
   evtSource.onmessage = e => {
-    try { renderPresence(JSON.parse(e.data)); } catch (_) {}
+    try {
+      const msg = JSON.parse(e.data);
+      if (Array.isArray(msg.occupied)) {
+        markOccupied(msg.occupied);
+      } else {
+        renderPresence(msg);
+      }
+    } catch (_) {}
   };
+
+  // Heartbeat: re-send presence every 20s to prevent TTL expiry
+  setInterval(() => { if (selected.size > 0) broadcastPresence(); }, 20000);
+
   window.addEventListener('beforeunload', () => {
-    // Clear our presence
     navigator.sendBeacon(
       `/rifa/${RIFA_ID}/presence/select`,
       JSON.stringify({ uid: MY_UID, numeros: [] })

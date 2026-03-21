@@ -85,8 +85,16 @@ async def mercadopago_webhook(request: Request):
 
         logger.info(f"{len(tickets)} ticket(s) confirmados para payment_id {payment_id}")
 
+        rifa_id = tickets[0].rifa_id
+
+        # Broadcast occupied numbers to all SSE clients for this rifa
+        numeros_confirmados = [t.numero_ticket for t in tickets if t.numero_ticket is not None]
+        if numeros_confirmados:
+            from web.presence import broadcast_occupied
+            await broadcast_occupied(rifa_id, numeros_confirmados)
+
         if _discord_bot:
-            rifa = await get_rifa(session, tickets[0].rifa_id)
+            rifa = await get_rifa(session, rifa_id)
             if rifa and rifa.canal_discord_id:
                 await _discord_bot.notificar_pago_confirmado(tickets, rifa)
 

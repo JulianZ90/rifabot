@@ -85,3 +85,8 @@ async def clear_presence(rifa_id: int, uid: str) -> None:
     if rifa_id in _sessions:
         _sessions[rifa_id].pop(uid, None)
     _broadcast(rifa_id, get_presence_snapshot(rifa_id))
+
+
+async def broadcast_occupied(rifa_id: int, numeros: list[int]) -> None:
+    """Notify all SSE clients that these numbers are now confirmed/occupied."""
+    _broadcast(rifa_id, {"occupied": numeros})
