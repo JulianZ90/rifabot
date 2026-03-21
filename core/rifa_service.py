@@ -1,3 +1,4 @@
+from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 from sqlalchemy.orm import selectinload
@@ -198,10 +199,15 @@ async def cancelar_rifa(session: AsyncSession, rifa_id: int, discord_server_id: 
         raise ValueError("No se puede cancelar una rifa que ya fue sorteada.")
     rifa.estado = EstadoRifa.cancelada
     rifa.cerrada_at = datetime.now(timezone.utc)
-    # Marcar tickets pendientes como rechazados
-    for ticket in rifa.tickets:
-        if ticket.estado == EstadoTicket.pendiente:
-            ticket.estado = EstadoTicket.rechazado
+    # Marcar tickets pendientes como rechazados — consulta directa para evitar
+    # dependencia en la colección cacheada rifa.tickets
+    tickets_result = await session.execute(
+        select(Ticket).where(
+            and_(Ticket.rifa_id == rifa_id, Ticket.estado == EstadoTicket.pendiente)
+        )
+    )
+    for ticket in tickets_result.scalars().all():
+        ticket.estado = EstadoTicket.rechazado
     return True
 
 

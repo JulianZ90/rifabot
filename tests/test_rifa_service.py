@@ -14,7 +14,7 @@ from core.rifa_service import (
     cancelar_rifa,
     get_or_create_server,
 )
-from db.models import EstadoRifa, EstadoTicket, PlataformaOrigen
+from db.models import EstadoRifa, EstadoTicket, PlataformaOrigen, Ticket
 
 SERVER_ID = "111222333"
 SERVER_ID_2 = "444555666"
@@ -218,13 +218,20 @@ async def test_cancelar_rifa(session):
     rifa = await crear_rifa(session, SERVER_ID, "Test", "", Decimal("50"))
     tickets = await crear_ticket(session, rifa.id, 2, plataforma_uid="user1")
 
+    ticket_ids = [t.id for t in tickets]
     ok = await cancelar_rifa(session, rifa.id, SERVER_ID)
     assert ok is True
 
     rifa_actualizada = await get_rifa(session, rifa.id)
     assert rifa_actualizada.estado == EstadoRifa.cancelada
-    for t in tickets:
-        assert t.estado == EstadoTicket.rechazado
+
+    # Seleccionamos solo la columna estado (no objetos ORM) para evitar lazy-load
+    from sqlalchemy import select as sa_select
+    result = await session.execute(
+        sa_select(Ticket.estado).where(Ticket.id.in_(ticket_ids))
+    )
+    estados = [row[0] for row in result.all()]
+    assert all(e == EstadoTicket.rechazado for e in estados), f"Estados: {estados}"
 
 
 async def test_cancelar_rifa_servidor_incorrecto(session):

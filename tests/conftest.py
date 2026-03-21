@@ -5,6 +5,8 @@ from cryptography.fernet import Fernet
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("ENCRYPTION_KEY", Fernet.generate_key().decode())
 os.environ.setdefault("RANDOMORG_API_KEY", "")
+os.environ.setdefault("SESSION_SECRET_KEY", "test-session-secret-key")
+os.environ.setdefault("WEBHOOK_BASE_URL", "http://test")
 
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker

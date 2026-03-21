@@ -19,7 +19,16 @@ cp .env.example.template .env
 python main.py
 ```
 
-There are no tests or linting configurations in this project.
+## Testing
+
+**Siempre escribir tests para código nuevo.** Ante cualquier feature, bugfix o refactor, agregar o actualizar tests en `tests/`. Usar `pytest` con `pytest-asyncio` para código async.
+
+Correr tests:
+```bash
+pytest
+```
+
+Si el directorio `tests/` o el archivo de test para el módulo modificado no existe, crearlo. No omitir este paso bajo ninguna circunstancia — ni aunque el usuario no lo pida explícitamente.
 
 ## Environment Variables
 
