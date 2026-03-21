@@ -12,8 +12,18 @@ async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
 
 async def init_db():
     from db.models import Base
+    from sqlalchemy import text
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Columnas agregadas en feature/rifas-numeradas — idempotente con IF NOT EXISTS
+        migrations = [
+            "ALTER TABLE rifas ADD COLUMN IF NOT EXISTS es_numerada BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE rifas ADD COLUMN IF NOT EXISTS numero_desde INTEGER",
+            "ALTER TABLE rifas ADD COLUMN IF NOT EXISTS numero_hasta INTEGER",
+            "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS numero_ticket INTEGER",
+        ]
+        for sql in migrations:
+            await conn.execute(text(sql))
 
 
 @asynccontextmanager
